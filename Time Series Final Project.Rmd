@@ -1,5 +1,5 @@
 ---
-title: "Time Series Fial Project"
+title: "Time Series Final Project"
 output: html_document
 date: "2023-11-20"
 ---
@@ -14,31 +14,32 @@ date: "2023-11-20"
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(fig.width = 8, fig.height = 4)
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
-
 ```
 
 
 ```{r library}
-
 library(zoo)
 library(lubridate)
 library(mgcv)
 library(TSA)
 library(dynlm)
 library(tseries)
+library(vars)
+library(rugarch)
+library(forecast)
 ```
 
 ```{r load data}
 #Read in data, split into full and abridged data
-full.data<-read.csv("jena_climate_2009_2016.csv")
+full.data<-read.csv("/Users/Vera/Downloads/jena_climate_2009_2016.csv")
 full.data$Date.Time <- as.POSIXct(full.data$Date.Time, format="%d.%m.%Y %H:%M:%S")
 full.data$Date <- as.Date(full.data$Date.Time)
-full.data$Date.Hour <- format(full.data$Date.Time,"%d.%m.%Y %H")
+full.data$Hour <- hour(full.data$Date.Time)
 ```
 
 
 ```{r}
-df <- data.frame(datetime = full.data$Date.Time, date.hour = full.data$Date.Hour, date = full.data$Date, pressure = full.data$p..mbar., temperature = full.data$Tpot..K., humidity = full.data$sh..g.kg.)
+df <- data.frame(datetime = full.data$Date.Time, date = full.data$Date, hour = full.data$Date.Time, pressure <- full.data$p..mbar., temperature = full.data$Tpot..K., humidity = full.data$sh..g.kg.)
 ```
 
 ```{r}
@@ -46,68 +47,77 @@ data.daily <- aggregate(df[-c(1,2,3)], list(df$date), mean)
 colnames(data.daily) <- c("date", "pressure", "temperature", "humidity")
 data.daily$month <- month(data.daily$date)
 
-training.data <- data.daily[1:2915,]
-training.date <- data.daily[1:2914,1]
-testing.data <- data.daily[2915:2921,]
-testing.date <- data.daily[2915:2921,1]
-training.month <- data.daily[1:2891,5]
-testing.month <- data.daily[2915:2921,5]
+data.hourly <- aggregate(df[-c(1,2,3)], list(df$date, df$hour), mean)
+colnames(data.hourly) <- c("date", "hour", "pressure", "temperature", "humidity")
+data.hourly$month <- month(data.hourly$date)
 
-ts.pressure.daily <- ts(data.daily$pressure, frequency = 365, start=c(2009,1))
-ts.temperature.daily <- ts(data.daily$temperature, frequency = 365, start=c(2009,1))
-ts.humidity.daily <- ts(data.daily$humidity, frequency = 365, start=c(2009,1))
+daily.training.data <- data.daily[1:2879,]
+daily.training.date <- data.daily[1:2879,1]
+daily.testing.data <- data.daily[2880:2921,]
+daily.testing.date <- data.daily[2880:2921,1]
+daily.training.month <- data.daily[1:2879,5]
+daily.testing.month <- data.daily[2880:2921,5]
+
+test.yday <- yday(daily.testing.date[1])
+
+
+daily.pressure.train.ts <- ts(daily.training.data$pressure, frequency = 365, start=c(2009,1))
+daily.temp.train.ts <- ts(daily.training.data$temperature, frequency = 365, start=c(2009,1))
+daily.humidity.train.ts <- ts(daily.training.data$humidity, frequency = 365, start=c(2009,1))
+
+daily.pressure.test.ts <- ts(daily.testing.data$pressure, frequency = 365, start=c(2016,test.yday))
+daily.temp.test.ts <- ts(daily.testing.data$temperature, frequency = 365, start=c(2016,test.yday))
+daily.humidity.test.ts <- ts(daily.testing.data$humidity, frequency = 365, start=c(2016,test.yday))
 ```
 
 
 ```{r}
-data.hourly <- aggregate(df[-c(1,2,3)], list(df$date.hour), mean)
-colnames(data.hourly) <- c("date.hour", "pressure", "temperature", "humidity")
+ts.plot(daily.pressure.train.ts, type="l", main=paste("pressure"),ylab="")
+ts.plot(daily.temp.train.ts, type="l", main=paste("temperature"),ylab="")
+ts.plot(daily.humidity.train.ts, type="l", main=paste("humidity"),ylab="")
 ```
 
 ```{r}
-ts.plot(ts.pressure.daily, type="l", main=paste("pressure"),ylab="")
-ts.plot(ts.temperature.daily, type="l", main=paste("temperature"),ylab="")
-ts.plot(ts.humidity.daily, type="l", main=paste("humidity"),ylab="")
-```
-
-```{r}
-stats::acf(as.matrix(data.daily[-c(1,5)]))
+stats::acf(as.matrix(daily.training.data[-c(1,5)]))
 ```
 
 ## Model each of the time series separetely using Non-parametric trend and ANOVA monthly seasonality
 
 ```{r}
-time.pts = c(1:length(ts.pressure.daily))
-time.pts = c(time.pts - min(time.pts))/max(time.pts)
-gam1.fitted = gam(ts.pressure.daily ~ s(time.pts)+factor(data.daily$month))
+daily.time.pts <- c(1:length(daily.training.date))
+daily.time.pts <- c(daily.time.pts - min(daily.time.pts))/max(daily.time.pts)
+```
+
+```{r}
+gam1.fitted = gam(daily.pressure.train.ts ~ s(daily.time.pts)+factor(daily.training.month))
 summary(gam1.fitted)
 ```
 
 ```{r}
-gam2.fitted = gam(ts.temperature.daily ~ s(time.pts)+factor(data.daily$month))
+gam2.fitted = gam(daily.temp.train.ts ~ s(daily.time.pts)+factor(daily.training.month))
 summary(gam2.fitted)
 ```
 
 
 ```{r}
-gam3.fitted = gam(ts.humidity.daily ~ s(time.pts)+factor(data.daily$month))
+gam3.fitted = gam(daily.humidity.train.ts ~ s(daily.time.pts)+factor(daily.training.month))
 summary(gam3.fitted)
 ```
 *Response*: Based on the model outputs above we can conclude the following: for all 3 models the monthly seasonality is significant. Trend is also significant for all 3 models.  
 
 ```{r}
 gam1.fitted.ts = ts(fitted(gam1.fitted), freq = 365, start = c(2009,1))
-plot(ts.pressure.daily,ylab="Pressure", col="black")
+plot(daily.pressure.train.ts,ylab="Pressure", col="black")
 lines(gam1.fitted.ts, lwd=1.5,col="purple")
 legend(x="topleft", legend=c("Pressure", "Non-parametric trend and monthly seasonality using ANOVA"), fill = c("black", "purple"), cex=0.7, lty=1)
 
 gam2.fitted.ts = ts(fitted(gam2.fitted), freq = 365, start = c(2009,1))
-plot(ts.temperature.daily,ylab="Temperature", col="black")
+plot(daily.temp.train.ts,ylab="Temperature", col="black")
 lines(gam2.fitted.ts, lwd=1.5,col="purple")
 legend(x="topleft", legend=c("Temperature", "Non-parametric trend and monthly seasonality using ANOVA"), fill = c("black", "purple"), cex=0.7, lty=1)
 
 gam3.fitted.ts = ts(fitted(gam3.fitted), freq = 365, start = c(2009,1))
-plot(ts.humidity.daily,ylab="Humidity", col="black")
+plot(daily.humidity.train.ts,ylab="Humidity", col="black")
 lines(gam3.fitted.ts, lwd=1.5,col="purple")
 legend(x="topleft", legend=c("Humidity", "Non-parametric trend and monthly seasonality using ANOVA"), fill = c("black", "purple"), cex=0.7, lty=1)
 ```
@@ -117,78 +127,95 @@ legend(x="topleft", legend=c("Humidity", "Non-parametric trend and monthly seaso
 ## Residual Analysis
 
 ```{r}
-ts.plot(ts(gam1.fitted$residuals, frequency = 365, start = c(2009,1)))
-acf(gam1.fitted$residuals, lag.max = 40)
-pacf(gam1.fitted$residuals, lag.max = 40)
+par(mfrow=c(2,2))
+ts.plot(ts(gam1.fitted$residuals, frequency = 365, start = c(2009,1)), main="Pressure Residuals")
+acf(gam1.fitted$residuals, lag.max = 40, main="ACF of Pressure Residuals")
+acf(gam1.fitted$residuals^2, lag.max = 40, main="ACF of Squared Pressure Residuals")
+pacf(gam1.fitted$residuals, lag.max = 40, main="PACF of Pressure Residuals")
 adf.test(gam1.fitted$residuals, k=1)
 adf.test(gam1.fitted$residuals, k=5)
 kpss.test(gam1.fitted$residuals)
 ```
 
-*Response*: Looking at the time series plot variance seems to be somewhat constant. On the ACF plot we see that most of the values after lag 7 are within the confidence band, which indicates stationarity. Results of Augmented Dickey-Fuller Test and KPSS test also suggest stationary data. To conclude, based on time series plot, ACF plot and results of the test for stationarity we conclude that the residuals of the first model are stationary.  
+*Response*: Looking at the time series plot variance seems to be somewhat constant, howevered acf of squared residuals shows some correlation. On the ACF plot we see that most of the values after lag 7 are within the confidence band, which indicates stationarity. Results of Augmented Dickey-Fuller Test and KPSS test also suggest stationary data. To conclude, based on time series plot, ACF plot and results of the test for stationarity we conclude that the residuals of the first model are stationary and there's heteroscedasticity present.  
 
 ```{r}
-ts.plot(ts(gam2.fitted$residuals, frequency = 365, start = c(2009,1)))
-acf(gam2.fitted$residuals, lag.max = 40)
-pacf(gam2.fitted$residuals, lag.max = 40)
+par(mfrow=c(2,2))
+ts.plot(ts(gam2.fitted$residuals, frequency = 365, start = c(2009,1)), main="Temperature Residuals")
+acf(gam2.fitted$residuals, lag.max = 40, main="ACF of Temperature Residuals")
+acf(gam2.fitted$residuals^2, lag.max = 40, main="ACF of Squared Temperature Residuals")
+pacf(gam2.fitted$residuals, lag.max = 40, main="PACF of Temperature Residuals")
 adf.test(gam2.fitted$residuals, k=1)
 adf.test(gam2.fitted$residuals, k=5)
 kpss.test(gam2.fitted$residuals)
 ```
 
-*Response*: Looking at the time series plot variance seems to be constant, but there are several outliers. On the ACF plot we see that most of the values after lag 8 are within the confidence band, which indicates stationarity. However, there are might be a seasonal pattern left in the residuals. Results of Augmented Dickey-Fuller Test and KPSS test suggest stationary data. Based on time series plot, ACF plot and results of the test for stationarity we conclude that the residuals of the second model seem to be stationary. 
+*Response*: Looking at the time series plot variance seems to be constant and squared residuals also show the same result. On the ACF plot we see that most of the values after lag 8 are within the confidence band, which indicates stationarity. However, there are might be a seasonal pattern left in the residuals. Results of Augmented Dickey-Fuller Test and KPSS test suggest stationary data. Based on time series plot, ACF plot and results of the test for stationarity we conclude that the residuals of the second model seem to be stationary and the variance seem to be constant. 
 
 ```{r}
-ts.plot(ts(gam3.fitted$residuals, frequency = 365, start = c(2009,1)))
-acf(gam3.fitted$residuals, lag.max = 40)
-pacf(gam3.fitted$residuals, lag.max = 40)
+par(mfrow=c(2,2))
+ts.plot(ts(gam3.fitted$residuals, frequency = 365, start = c(2009,1)), main="Humidity Residuals")
+acf(gam3.fitted$residuals, lag.max = 40, main="ACF of Humidity Residuals")
+acf(gam3.fitted$residuals^2, lag.max = 40, main="ACF of Squared Humidity Residuals")
+pacf(gam3.fitted$residuals, lag.max = 40, main="PACF of Humidity Residuals")
 adf.test(gam3.fitted$residuals, k=1)
 adf.test(gam3.fitted$residuals, k=5)
 kpss.test(gam3.fitted$residuals)
 ```
-*Response*: Looking at the time series plot variance mostly seems to be constant. On the ACF plot we see a seasonal pattern, which indicates non stationarity. However, results of Augmented Dickey-Fuller Test and KPSS both test suggest stationary data. So there is not enough evidence to indicate non stationary data. To conclude, based on time series plot, ACF plot and results of the test for stationarity we conclude that the residuals of the third model are close to stationary, but we cannot say for sure. 
+*Response*: Looking at the time series plot and ACF plot of Squared residuals we conclude that the variance isn't constant. On the ACF plot we see a seasonal pattern, which indicates non stationarity. However, results of Augmented Dickey-Fuller Test and KPSS both test suggest stationary data. So there is not enough evidence to indicate non stationary data. To conclude, based on time series plot, ACF plot and results of the test for stationarity we conclude that the residuals of the third model are close to stationary, but we cannot say for sure. There's also heteroscedasticity in the residuals.
 
 
-## ARMA: Pressure
+## ARMA modeling
+
+### Pressure
 ```{r}
-#harmonic <- cbind(sin(data.daily$month*2*pi/7),cos(data.daily$month*2*pi/7))
-#colnames(harmonic) <- c("Sin","Cos")
-
-#arima4 <- arima(ts.temperature.daily, order = c(p[i],1,q[j]), method='ML', xreg=harmonic)
+nfit = length(daily.testing.date)
+harmonic.train <- cbind(sin(daily.training.month*2*pi/12),cos(daily.training.month*2*pi/12))
+harmonic.test <- cbind(sin(daily.testing.month*2*pi/12),cos(daily.training.month*2*pi/12))
 ```
 
 ```{r}
-## Fit an ARMA model to the log transformed time series
-n <- length(ts.pressure.daily) 
-norder <- 9
-p = c(1:norder)-1; q = c(1:norder)-1
-aic <- matrix(0,norder,norder)
-for(i in 1:norder){
-  for(j in 1:norder){
-    modij <- arima(ts.pressure.daily, order = c(p[i],1,q[j]), method='ML')
-    aic[i,j] <- modij$aic
-  }  
+## Fit an ARMA model to the residuals
+
+#Iterative function
+test_modelA <- function(p,d,q,train.data){
+  mod = Arima(train.data,order=c(p,d,q),xreg=as.matrix(harmonic.train))
+  current.aic = AIC(mod)
+  df = data.frame(p,d,q,current.aic)
+  names(df) <- c("p","d","q","AIC")
+  return(df)
 }
+```
 
-# Extract the "best" one according to AIC
-aicv <- as.vector(aic)  
-plot(aicv,ylab="AIC values")
-indexp <- rep(c(1:norder),norder)
-indexq <- rep(c(1:norder),each=norder)
-indexaic <- which(aicv == min(aicv))
-porder <- indexp[indexaic]-1
-qorder <- indexq[indexaic]-1
-cat("Order of the selected model is: AR order p =", porder, "; MA order q =", qorder)
-cat("The best model AIC is", aicv[indexaic])
-```
 ```{r}
-arma1 <- arima(ts.pressure.daily, order = c(0,1,8), method='ML')
-arma1
+#orders = data.frame(Inf,Inf,Inf, Inf)
+#names(orders) <- c("p","d","q","AIC")
+
+#Orders for Arima for Pressure
+#for (p in 0:9){
+#    for (q in 0:9) {
+#      for (d in 0:1) {
+#          possibleError <- tryCatch(
+#          orders<-rbind(orders,test_modelA(p,d,q,daily.pressure.train.ts)),
+#          error=function(e) e
+#          )
+#          if(inherits(possibleError, "error")) next
+#      }
+#  }
+#}
+#orders <- orders[order(-orders$AIC),]
+#tail(orders,5)
 ```
+
+```{r}
+arma.pressure <- Arima(daily.pressure.train.ts,order=c(4,1,6),xreg=as.matrix(harmonic.train))
+arma.pressure
+```
+
 ```{r}
 ## compute the test statistics
 testval <-
-  as.numeric(arma1$coef) / as.numeric(sqrt(diag(arma1$var.coef)))
+  as.numeric(arma.pressure$coef) / as.numeric(sqrt(diag(arma.pressure$var.coef)))
 
 ## print t-statistic
 print(testval)
@@ -201,153 +228,48 @@ which(abs(testval)>qnorm((1-0.05/2)))
 ```
 
 ```{r}
-pressure.fitted.ts = ts(fitted(arma1), freq = 365, start = c(2009,1))
-plot(ts.pressure.daily,ylab="Pressure", col="black")
-lines(pressure.fitted.ts, lwd=0.3,col="green")
-legend(x="topleft", legend=c("Pressure", "ARIMA(0,1,8)"), fill = c("black", "green"), cex=0.7, lty=1)
-
-ts.plot(ts(residuals(arma1), frequency = 365, start = c(2009,1)))
-```
-```{r}
-acf(residuals(arma1), lag.max = 365*2)
-adf.test(residuals(arma1), k=1)
-adf.test(residuals(arma1), k=5)
-kpss.test(residuals(arma1))
-qqnorm(residuals(arma1))
-qqline(residuals(arma1))
+par(mfrow=c(2,2))
+ts.plot(ts(residuals(arma.pressure), frequency = 365, start = c(2009,1)))
+acf(residuals(arma.pressure), lag.max = 40)
+acf(residuals(arma.pressure)^2, lag.max = 40)
+qqnorm(residuals(arma.pressure))
+qqline(residuals(arma.pressure))
 
 #perform shapiro-wilk test
-shapiro.test(residuals(arma1))
-Box.test(residuals(arma1), lag = (8 + 1), type = "Ljung-Box", fitdf = 8)
+shapiro.test(residuals(arma.pressure))
 ```
 
-Shapiro-Wilk normality test shows that the residuals are not normally distributed because it rejects the null hypothesis of normal distribution. The QQ plot also shows heavier tails than for normal distribution. We conclude that the residuals does not follow normal distribution, which is required for model fitting using MLE. The Ljung-Box test gives a p-value of 0.4 and there is no strong evidence that the residuals are correlated as we fail to reject the null hypothesis of non correlated.
 
-
-** ARMA: Tempereture
-
+### Temperature
 ```{r}
-## Fit an ARMA model to the log transformed time series
-n <- length(ts.temperature.daily) 
-norder <- 9
-p = c(1:norder)-1; q = c(1:norder)-1
-aic <- matrix(0,norder,norder)
-for(i in 1:norder){
-  for(j in 1:norder){
-    modij <- arima(ts.temperature.daily, order = c(p[i],1,q[j]), method='ML')
-    aic[i,j] <- modij$aic
-  }  
-}
+#orders = data.frame(Inf,Inf,Inf, Inf)
+#names(orders) <- c("p","d","q","AIC")
 
-# Extract the "best" one according to AIC
-aicv <- as.vector(aic)  
-plot(aicv,ylab="AIC values")
-indexp <- rep(c(1:norder),norder)
-indexq <- rep(c(1:norder),each=norder)
-indexaic <- which(aicv == min(aicv))
-porder <- indexp[indexaic]-1
-qorder <- indexq[indexaic]-1
-cat("Order of the selected model is: AR order p =", porder, "; MA order q =", qorder)
-cat("The best model AIC is", aicv[indexaic])
+#Orders for Arima for Temperature
+#for (p in 0:9){
+#    for (q in 0:9) {
+#      for (d in 0:1) {
+#          possibleError <- tryCatch(
+#          orders<-rbind(orders,test_modelA(p,d,q,daily.temp.train.ts)),
+#          error=function(e) e
+#          )
+#          if(inherits(possibleError, "error")) next
+#      }
+#  }
+#}
+#orders <- orders[order(-orders$AIC),]
+#tail(orders,5)
 ```
 
 ```{r}
-arma2 <- arima(ts.temperature.daily, order = c(8,1,8), method='ML')
-arma2
-```
-
-```{r}
-temperature.fitted.ts = ts(fitted(arma2), freq = 365, start = c(2009,1))
-plot(ts.temperature.daily,ylab="Temperature", col="black")
-lines(temperature.fitted.ts, lwd=0.3,col="green")
-legend(x="topleft", legend=c("Temperature", "ARIMA(8,1,8)"), fill = c("black", "green"), cex=0.7, lty=1)
-
-ts.plot(ts(residuals(arma2), frequency = 365, start = c(2009,1)))
-
-acf(residuals(arma2), lag.max = 365*2)
-adf.test(residuals(arma2), k=1)
-adf.test(residuals(arma2), k=5)
-kpss.test(residuals(arma2))
-qqnorm(residuals(arma2))
-qqline(residuals(arma2))
-
-#perform shapiro-wilk test
-shapiro.test(residuals(arma2))
-Box.test(residuals(arma2), lag = (8 + 1), type = "Ljung-Box", fitdf = 8)
+arma.temp <- Arima(daily.temp.train.ts,order=c(8,1,4),xreg=as.matrix(harmonic.train))
+arma.temp
 ```
 
 ```{r}
 ## compute the test statistics
 testval <-
-  as.numeric(arma1$coef) / as.numeric(sqrt(diag(arma2$var.coef)))
-
-## print t-statistic
-print(testval)
-
-## print p-values
-print(2*(1-pnorm(abs(testval))))
-
-## print significant coefficients for significance level 0.05
-which(abs(testval)>qnorm((1-0.05/2)))
-```
-
-
-
-** ARMA Humidity
-```{r}
-## Fit an ARMA model to the log transformed time series
-n <- length(ts.humidity.daily) 
-norder <- 9
-p = c(1:norder)-1; q = c(1:norder)-1
-aic <- matrix(0,norder,norder)
-for(i in 1:norder){
-  for(j in 1:norder){
-    modij <- arima(ts.humidity.daily, order = c(p[i],1,q[j]), method='ML')
-    aic[i,j] <- modij$aic
-  }  
-}
-
-# Extract the "best" one according to AIC
-aicv <- as.vector(aic)  
-plot(aicv,ylab="AIC values")
-indexp <- rep(c(1:norder),norder)
-indexq <- rep(c(1:norder),each=norder)
-indexaic <- which(aicv == min(aicv))
-porder <- indexp[indexaic]-1
-qorder <- indexq[indexaic]-1
-cat("Order of the selected model is: AR order p =", porder, "; MA order q =", qorder)
-cat("The best model AIC is", aicv[indexaic])
-```
-
-```{r}
-arma3 <- arima(ts.humidity.daily, order = c(6,1,8), method='ML')
-arma3
-```
-
-```{r}
-humidity.fitted.ts = ts(fitted(arma3), freq = 365, start = c(2009,1))
-plot(ts.humidity.daily,ylab="Humidity", col="black")
-lines(humidity.fitted.ts, lwd=0.3,col="green")
-legend(x="topleft", legend=c("Humidity", "ARIMA(6,1,8)"), fill = c("black", "green"), cex=0.7, lty=1)
-
-ts.plot(ts(residuals(arma3), frequency = 365, start = c(2009,1)))
-
-acf(residuals(arma3), lag.max = 365*2)
-adf.test(residuals(arma3), k=1)
-adf.test(residuals(arma3), k=5)
-kpss.test(residuals(arma3))
-qqnorm(residuals(arma3))
-qqline(residuals(arma3))
-
-#perform shapiro-wilk test
-shapiro.test(residuals(arma3))
-Box.test(residuals(arma3), lag = (8 + 1), type = "Ljung-Box", fitdf = 8)
-```
-
-```{r}
-## compute the test statistics
-testval <-
-  as.numeric(arma1$coef) / as.numeric(sqrt(diag(arma3$var.coef)))
+  as.numeric(arma.temp$coef) / as.numeric(sqrt(diag(arma.temp$var.coef)))
 
 ## print t-statistic
 print(testval)
@@ -360,66 +282,486 @@ which(abs(testval)>qnorm((1-0.05/2)))
 ```
 
 ```{r}
-library(vars)
-library(MASS)
-VARselect(cbind(ts.pressure.daily,ts.temperature.daily,ts.humidity.daily), lag.max = 10, season= 7, type="const")$selection
-model.var <- VAR(cbind(ts.pressure.daily,ts.temperature.daily,ts.humidity.daily), p = 5, season = 7, type="const")
-```
-```{r}
-model.var.restricted <- restrict(model.var, thresh = qt(0.05/2,778))
-```
-```{r}
-plot(ts(residuals(model.var)), main = "Residual process of VAR")
+par(mfrow=c(2,2))
+ts.plot(ts(residuals(arma.temp), frequency = 365, start = c(2009,1)))
+acf(residuals(arma.temp), lag.max = 40)
+acf(residuals(arma.temp)^2, lag.max = 40)
+qqnorm(residuals(arma.temp))
+qqline(residuals(arma.temp))
 
-vars::arch.test(model.var)
-normality.test(model.var)
-serial.test(model.var)
+#perform shapiro-wilk test
+shapiro.test(residuals(arma.temp))
 ```
 
+### Humidity
 ```{r}
-exogen <-  cbind(ts.humidity.daily,ts.temperature.daily)
-harmonic <- sin(wday(data.daily$date)*2*pi/7)+cos(wday(data.daily$date)*2*pi/7)
-ts.harmonic <- ts(harmonic, frequency = 365, start=c(2009,1))
-VARselect(ts.pressure.daily, lag.max = 10,exogen=exogen, type = "const")$selection
+#Orders for Arima for Humidity
+#orders = data.frame(Inf,Inf,Inf, Inf)
+#names(orders) <- c("p","d","q","AIC")
+
+#for (p in 0:9){
+#    for (q in 0:9) {
+#      for (d in 0:1) {
+#          possibleError <- tryCatch(
+#          orders<-rbind(orders,test_modelA(p,d,q,daily.humidity.train.ts)),
+#          error=function(e) e
+#          )
+#          if(inherits(possibleError, "error")) next
+#      }
+#  }
+#}
+#orders <- orders[order(-orders$AIC),]
+#tail(orders,5)
 ```
 
 ```{r}
-model_varx <- VAR(cbind(ts.pressure.daily, ts.harmonic), p = 3, type = "both", exogen = cbind(ts.humidity.daily,ts.temperature.daily))
+arma.humidity <- Arima(daily.humidity.train.ts,order=c(5,0,1),xreg=as.matrix(harmonic.train))
+arma.humidity
 ```
+
 ```{r}
-plot(ts(residuals(model_varx$varresult$ts.pressure.daily)), main = "Residual process of VARX")
+## compute the test statistics
+testval <-
+  as.numeric(arma.humidity$coef) / as.numeric(sqrt(diag(arma.humidity$var.coef)))
+
+## print t-statistic
+print(testval)
+
+## print p-values
+print(2*(1-pnorm(abs(testval))))
+
+## print significant coefficients for significance level 0.05
+which(abs(testval)>qnorm((1-0.05/2)))
 ```
+
 ```{r}
-fore.var <- predict(model.var, n.ahead = 7, ci=0.95)
-predict.var <- fore.var$fcst$ts.pressure.daily
-fore.var.restricted <- predict(model.var.restricted, n.ahead = 7, ci = 0.95)
-predict.var.restricted <- fore.var.restricted$fcst$ts.pressure.daily
-fore.varx <- predict(model_varx, n.ahead = 7, ci = 0.95, dumvar = cbind(exogen[2915:2921, ]))
-fore.gam <- gam1.fitted.ts[2915:2921]
-fore.arma <- predict(arma1, n.ahead = 7, ci=0.95)
-prediction <- predict(gam1.fitted, type = "response", se.fit = TRUE)
-se <- prediction$se.fit
-se <- se[2915:2921]
+par(mfrow=c(2,2))
+ts.plot(ts(residuals(arma.humidity), frequency = 365, start = c(2009,1)))
+acf(residuals(arma.humidity), lag.max = 40)
+acf(residuals(arma.humidity)^2, lag.max = 40)
+qqnorm(residuals(arma.humidity))
+qqline(residuals(arma.humidity))
+
+#perform shapiro-wilk test
+shapiro.test(residuals(arma.humidity))
 ```
+### Results
+
+For all 3 models we see the similar results: 
+1) ACF plot of residuals indicates that the residuals aren't correlated
+2) ACF plot of Squared residuals indicates that the squared residuals are correlated, so we conclude that heteroskedasticity is present in the residuals.
+3) Shapiro-Wilk normality test shows that the residuals are not normally distributed because it rejects the null hypothesis of normal distribution. The QQ plot also shows heavier tails than for normal distribution. We conclude that the residuals does not follow normal distribution, which is required for model fitting using MLE. We conclude that our models aren't the good fit. 
+
+
+## ARMA-GARCH for modeling pressure
 ```{r}
-plot(testing.date, data.daily[2915:2921,2],type = "l", xlab = "Time", ylab = "Daily Pressure", col = "black",ylim = c(960,1015))
-lines(testing.data[,1], fore.var$fcst$ts.pressure.daily[,2], col = "red", lw = 1.5)
-lines(testing.data[,1], fore.var$fcst$ts.pressure.daily[,3], col = "red", lw = 1.5)
-points(testing.data[,1], fore.var$fcst$ts.pressure.daily[,1], col = "red")
-lines(testing.data[,1], fore.var.restricted$fcst$ts.pressure.daily[,2], col = "blue")
-lines(testing.data[,1], fore.var.restricted$fcst$ts.pressure.daily[,3], col = "blue")
-points(testing.data[,1], fore.var.restricted$fcst$ts.pressure.daily[,1], col = "blue")
-lines(testing.data[,1], fore.varx$fcst$ts.pressure.daily[,2], col = "orange")
-lines(testing.data[,1], fore.varx$fcst$ts.pressure.daily[,3], col = "orange")
-points(testing.data[,1], fore.varx$fcst$ts.pressure.daily[,1], col = "orange")
-lines(testing.data[,1], fore.arma$pred-1.96*fore.arma$se, col = "green")
-lines(testing.data[,1], fore.arma$pred+1.96*fore.arma$se, col = "green")
-points(testing.data[,1], fore.arma$pred, col = "green")
-lines(testing.data[,1], fore.gam+1.96*se, col = "purple")
-lines(testing.data[,1], fore.gam-1.96*se, col = "purple")
-points(testing.data[,1], fore.gam, col = "purple")
-legend('topleft', legend = c("VAR", "Restricted VAR", "VARX", "ARMA", "GAM"),
-       lwd = 2, col = c("red", "blue", "orange", "green", "purple"),
-       inset = c(0, 0))
+# We take order of ARMA equal to (4,1,6)
+# Find order for GARCH
+test_modelAGG <- function(m,n){
+    spec = ugarchspec(variance.model=list(garchOrder=c(m,n)),
+                      mean.model=list(armaOrder=c(4,1,6),
+                                      external.regressors = as.matrix(harmonic.train),
+                                      include.mean=T), distribution.model="std")
+    fit = ugarchfit(spec, daily.pressure.train.ts, solver = 'hybrid')
+    current.aic = infocriteria(fit)[1]
+    df = data.frame(m,n,current.aic)
+    names(df) <- c("m","n","AIC")
+    return(df)
+}
+
+ordersAGG = data.frame(Inf,Inf,Inf)
+names(ordersAGG) <- c("m","n","AIC")
+
+for (m in 0:2){
+    for (n in 0:2){
+        possibleError <- tryCatch(
+            ordersAGG<-rbind(ordersAGG,test_modelAGG(m,n)),
+            error=function(e) e
+        )
+        if(inherits(possibleError, "error")) next
+    }
+}
+ordersAGG <- ordersAGG[order(-ordersAGG$AIC),]
+tail(ordersAGG)
 ```
+
+
+```{r}
+# Update ARMA using GARCH = (2,2)
+test_modelAGA <- function(p,q){
+    spec = ugarchspec(variance.model=list(garchOrder=c(1,1)),
+                      mean.model=list(armaOrder=c(p,q),
+                                      external.regressors = as.matrix(harmonic.train),
+                                      include.mean=T),
+                      distribution.model="std")
+    fit = ugarchfit(spec, daily.pressure.train.ts, solver = 'hybrid')
+    current.aic = infocriteria(fit)[1]
+    df = data.frame(p,q,current.aic)
+    names(df) <- c("p","q","AIC")
+    return(df)
+}
+
+ordersAGA = data.frame(Inf,Inf,Inf)
+names(ordersAGA) <- c("p","q","AIC")
+for (p in 0:7){
+    for (q in 0:7){1
+              ordersAGA<-rbind(ordersAGA,test_modelAGA(p,q))
+    }
+}
+ordersAGA <- ordersAGA[order(-ordersAGA$AIC),]
+tail(ordersAGA)
+```
+
+```{r}
+# Update order for GARCH using ARMA (6,5s)
+test_modelAGG <- function(m,n){
+    spec = ugarchspec(variance.model=list(garchOrder=c(m,n)),
+                      mean.model=list(armaOrder=c(6,5),
+                                      external.regressors = as.matrix(harmonic.train),
+                                      include.mean=T), distribution.model="std")
+    fit = ugarchfit(spec, daily.pressure.train.ts, solver = 'hybrid')
+    current.aic = infocriteria(fit)[1]
+    df = data.frame(m,n,current.aic)
+    names(df) <- c("m","n","AIC")
+    return(df)
+}
+
+ordersAGG = data.frame(Inf,Inf,Inf)
+names(ordersAGG) <- c("m","n","AIC")
+
+for (m in 0:2){
+    for (n in 0:2){
+        possibleError <- tryCatch(
+            ordersAGG<-rbind(ordersAGG,test_modelAGG(m,n)),
+            error=function(e) e
+        )
+        if(inherits(possibleError, "error")) next
+    }
+}
+ordersAGG <- ordersAGG[order(-ordersAGG$AIC),]
+tail(ordersAGG)
+```
+
+The final iteration shows that the optimal orders for modeling the temperature are (6,5)x(1,1).
+
+```{r}
+spec.1 = ugarchspec(variance.model=list(garchOrder=c(1,1)),
+                 mean.model=list(armaOrder=c(6,5),
+                                 external.regressors = as.matrix(harmonic.train),
+                                  include.mean=T), distribution.model="std")
+pressure.arma.garch<-ugarchfit(spec.1,daily.pressure.train.ts,solver='hybrid')
+pressure.arma.garch
+```
+
+```{r}
+par(mfrow=c(2,2))
+ts.plot(ts(residuals(pressure.arma.garch), frequency = 365, start = c(2009,1)))
+acf(residuals(pressure.arma.garch), lag.max = 40)
+acf(residuals(pressure.arma.garch)^2, lag.max = 40)
+qqnorm(residuals(pressure.arma.garch))
+qqline(residuals(pressure.arma.garch))
+```
+
+## ARMA-GARCH for modeling temperature
+```{r}
+# We take order of ARMA equal to (8,1,4)
+# Find order for GARCH
+test_modelAGG <- function(m,n){
+    spec = ugarchspec(variance.model=list(garchOrder=c(m,n)),
+                      mean.model=list(armaOrder=c(8,1,4),
+                                      external.regressors = as.matrix(harmonic.train),
+                                      include.mean=T), distribution.model="std")
+    fit = ugarchfit(spec, daily.temp.train.ts, solver = 'hybrid')
+    current.aic = infocriteria(fit)[1]
+    df = data.frame(m,n,current.aic)
+    names(df) <- c("m","n","AIC")
+    return(df)
+}
+
+ordersAGG = data.frame(Inf,Inf,Inf)
+names(ordersAGG) <- c("m","n","AIC")
+
+for (m in 0:2){
+    for (n in 0:2){
+        possibleError <- tryCatch(
+            ordersAGG<-rbind(ordersAGG,test_modelAGG(m,n)),
+            error=function(e) e
+        )
+        if(inherits(possibleError, "error")) next
+    }
+}
+ordersAGG <- ordersAGG[order(-ordersAGG$AIC),]
+tail(ordersAGG)
+```
+
+```{r}
+# Update ARMA using GARCH = (2,0)
+test_modelAGA <- function(p,q){
+    spec = ugarchspec(variance.model=list(garchOrder=c(2,0)),
+                      mean.model=list(armaOrder=c(p,q),
+                                      external.regressors = as.matrix(harmonic.train),
+                                      include.mean=T),
+                      distribution.model="std")
+    fit = ugarchfit(spec, daily.temp.train.ts, solver = 'hybrid')
+    current.aic = infocriteria(fit)[1]
+    df = data.frame(p,q,current.aic)
+    names(df) <- c("p","q","AIC")
+    return(df)
+}
+
+ordersAGA = data.frame(Inf,Inf,Inf)
+names(ordersAGA) <- c("p","q","AIC")
+for (p in 0:7){
+    for (q in 0:7){
+        possibleError <- tryCatch(
+            ordersAGA<-rbind(ordersAGA,test_modelAGA(p,q)),
+            error=function(e) e
+        )
+        if(inherits(possibleError, "error")) next
+    }
+}
+ordersAGA <- ordersAGA[order(-ordersAGA$AIC),]
+tail(ordersAGA)
+```
+
+```{r}
+# We take order of ARMA equal to (6,5)
+# Find order for GARCH
+test_modelAGG <- function(m,n){
+    spec = ugarchspec(variance.model=list(garchOrder=c(m,n)),
+                      mean.model=list(armaOrder=c(6,5),
+                                      external.regressors = as.matrix(harmonic.train),
+                                      include.mean=T), distribution.model="std")
+    fit = ugarchfit(spec, daily.temp.train.ts, solver = 'hybrid')
+    current.aic = infocriteria(fit)[1]
+    df = data.frame(m,n,current.aic)
+    names(df) <- c("m","n","AIC")
+    return(df)
+}
+
+ordersAGG = data.frame(Inf,Inf,Inf)
+names(ordersAGG) <- c("m","n","AIC")
+
+for (m in 0:2){
+    for (n in 0:2){
+        possibleError <- tryCatch(
+            ordersAGG<-rbind(ordersAGG,test_modelAGG(m,n)),
+            error=function(e) e
+        )
+        if(inherits(possibleError, "error")) next
+    }
+}
+ordersAGG <- ordersAGG[order(-ordersAGG$AIC),]
+tail(ordersAGG)
+```
+
+```{r}
+# Update ARMA using GARCH = (1,1)
+test_modelAGA <- function(p,q){
+    spec = ugarchspec(variance.model=list(garchOrder=c(1,1)),
+                      mean.model=list(armaOrder=c(p,q),
+                                      external.regressors = as.matrix(harmonic.train),
+                                      include.mean=T),
+                      distribution.model="std")
+    fit = ugarchfit(spec, daily.temp.train.ts, solver = 'hybrid')
+    current.aic = infocriteria(fit)[1]
+    df = data.frame(p,q,current.aic)
+    names(df) <- c("p","q","AIC")
+    return(df)
+}
+
+ordersAGA = data.frame(Inf,Inf,Inf)
+names(ordersAGA) <- c("p","q","AIC")
+for (p in 0:7){
+    for (q in 0:7){
+        possibleError <- tryCatch(
+            ordersAGA<-rbind(ordersAGA,test_modelAGA(p,q)),
+            error=function(e) e
+        )
+        if(inherits(possibleError, "error")) next
+    }
+}
+ordersAGA <- ordersAGA[order(-ordersAGA$AIC),]
+tail(ordersAGA)
+```
+
+The final iteration shows that the optimal orders for modeling the temperature are (6,5)x(1,1).
+
+```{r}
+spec.2 = ugarchspec(variance.model=list(garchOrder=c(1,1)),
+                 mean.model=list(armaOrder=c(6,5),
+                                 external.regressors = as.matrix(harmonic.train),
+                                  include.mean=T), distribution.model="std")
+temp.arma.garch<-ugarchfit(spec.2,daily.temp.train.ts,solver='hybrid')
+temp.arma.garch
+```
+
+
+```{r}
+par(mfrow=c(2,2))
+ts.plot(ts(residuals(temp.arma.garch), frequency = 365, start = c(2009,1)))
+acf(residuals(temp.arma.garch), lag.max = 40)
+acf(residuals(temp.arma.garch)^2, lag.max = 40)
+qqnorm(residuals(temp.arma.garch))
+qqline(residuals(temp.arma.garch))
+```
+
+
+
+## ARMA-GARCH for modeling humidity
+```{r}
+# We take order of ARMA equal to (6,0,5)
+# Find order for GARCH
+test_modelAGG <- function(m,n){
+    spec = ugarchspec(variance.model=list(garchOrder=c(m,n)),
+                      mean.model=list(armaOrder=c(6,5),
+                                      external.regressors = as.matrix(harmonic.train),
+                                      include.mean=T), distribution.model="std")
+    fit = ugarchfit(spec, daily.humidity.train.ts, solver = 'hybrid')
+    current.aic = infocriteria(fit)[1]
+    df = data.frame(m,n,current.aic)
+    names(df) <- c("m","n","AIC")
+    return(df)
+}
+
+ordersAGG = data.frame(Inf,Inf,Inf)
+names(ordersAGG) <- c("m","n","AIC")
+
+for (m in 0:2){
+    for (n in 0:2){
+        possibleError <- tryCatch(
+            ordersAGG<-rbind(ordersAGG,test_modelAGG(m,n)),
+            error=function(e) e
+        )
+        if(inherits(possibleError, "error")) next
+    }
+}
+ordersAGG <- ordersAGG[order(-ordersAGG$AIC),]
+tail(ordersAGG)
+```
+
+```{r}
+# Update ARMA using GARCH = (2,2)
+test_modelAGA <- function(p,q){
+    spec = ugarchspec(variance.model=list(garchOrder=c(2,2)),
+                      mean.model=list(armaOrder=c(p,q),
+                                      external.regressors = as.matrix(harmonic.train),
+                                      include.mean=T),
+                      distribution.model="std")
+    fit = ugarchfit(spec, daily.humidity.train.ts, solver = 'hybrid')
+    current.aic = infocriteria(fit)[1]
+    df = data.frame(p,q,current.aic)
+    names(df) <- c("p","q","AIC")
+    return(df)
+}
+
+ordersAGA = data.frame(Inf,Inf,Inf)
+names(ordersAGA) <- c("p","q","AIC")
+for (p in 0:7){
+    for (q in 0:7){
+        possibleError <- tryCatch(
+            ordersAGA<-rbind(ordersAGA,test_modelAGA(p,q)),
+            error=function(e) e
+        )
+        if(inherits(possibleError, "error")) next
+    }
+}
+ordersAGA <- ordersAGA[order(-ordersAGA$AIC),]
+tail(ordersAGA)
+```
+
+```{r}
+# Update order for GARCH using ARMA (4,4)
+test_modelAGG <- function(m,n){
+    spec = ugarchspec(variance.model=list(garchOrder=c(m,n)),
+                      mean.model=list(armaOrder=c(4,4),
+                                      external.regressors = as.matrix(harmonic.train),
+                                      include.mean=T), distribution.model="std")
+    fit = ugarchfit(spec, daily.humidity.train.ts, solver = 'hybrid')
+    current.aic = infocriteria(fit)[1]
+    df = data.frame(m,n,current.aic)
+    names(df) <- c("m","n","AIC")
+    return(df)
+}
+
+ordersAGG = data.frame(Inf,Inf,Inf)
+names(ordersAGG) <- c("m","n","AIC")
+
+for (m in 0:2){
+    for (n in 0:2){
+        possibleError <- tryCatch(
+            ordersAGG<-rbind(ordersAGG,test_modelAGG(m,n)),
+            error=function(e) e
+        )
+        if(inherits(possibleError, "error")) next
+    }
+}
+ordersAGG <- ordersAGG[order(-ordersAGG$AIC),]
+tail(ordersAGG)
+```
+
+The final iteration shows that the optimal orders for modeling the temperature are (4,4)x(2,2).
+
+```{r}
+spec.3 = ugarchspec(variance.model=list(garchOrder=c(2,2)),
+                 mean.model=list(armaOrder=c(4,4),
+                                 external.regressors = as.matrix(harmonic.train),
+                                  include.mean=T), distribution.model="std")
+hum.arma.garch<-ugarchfit(spec.3,daily.humidity.train.ts,solver='hybrid')
+hum.arma.garch
+```
+
+```{r}
+par(mfrow=c(2,2))
+ts.plot(ts(residuals(hum.arma.garch), frequency = 365, start = c(2009,1)))
+acf(residuals(hum.arma.garch), lag.max = 40)
+acf(residuals(hum.arma.garch)^2, lag.max = 40)
+qqnorm(residuals(hum.arma.garch))
+qqline(residuals(hum.arma.garch))
+```
+
+
+# VAR modeling
+
+```{r}
+train.data <- cbind(daily.pressure.train.ts, daily.temp.train.ts, daily.humidity.train.ts)
+colnames(train.data) <- c("pressure", "temperature", "humidity")
+var.select<-VARselect(train.data, exogen=harmonic.train, type="both")
+var.select$selection
+```
+
+```{r}
+var1<-VAR(train.data,p=3, exogen=harmonic.train, type="both")
+summary(var1)
+```
+*Results*
+Looking at the roots of the characteristic polynomial, we see that their absolute values are less than 1, which indicates that our VAR model is stable.
+
+Looking at the  output of the models for all 3 weather components we conclude the following:
+-trend isn't statistically significant for all 3 weather components. 
+-harmonic seasonality coefficients aren't statistically significant for the first model (for pressure). However, they are statistically significant for models for temperature and humidity.
+-for pressure: lead lag relationship with temperature at lag 1, lag 2 and lag 3, lead lag relationship with humidity only at lag 3. Lead lag relationship with the time series itself is statistically significant at lag 1,2 and 3.
+-for temperature: lead lag relationship with pressure at lag 1, lag 2 and lag 3, lead lag relationship with humidity only at lag 3. Lead lag relationship with the time series itself is statistically significant at lag 1,2 and 3.
+-for humidity: lead lag relationship with temperature at lag 1 and lag 3, lead lag relationship with pressure at lag 1 and lag 3. Lead lag relationship with the time series itself is statistically significant at lag 1,2 and 3.
+
+
+```{r}
+var.restrict.model=restrict(var1)  
+summary(var.restrict.model)
+```
+# Forecasting comparison
+
+```{r}
+nfit = length(daily.training.date)
+nfore = length(daily.testing.date)
+```
+
+
+
+
+
+
+
+
+
 
