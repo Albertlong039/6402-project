@@ -1,0 +1,425 @@
+---
+title: "Time Series Fial Project"
+output: html_document
+date: "2023-11-20"
+---
+
+```{r setup, include = FALSE}
+
+# Set up the default parameters
+# 1. The code block will be shown in the document
+# 2. set up figure display size
+# 3. turn off all the warnings and messages
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.width = 8, fig.height = 4)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+```
+
+
+```{r library}
+
+library(zoo)
+library(lubridate)
+library(mgcv)
+library(TSA)
+library(dynlm)
+library(tseries)
+```
+
+```{r load data}
+#Read in data, split into full and abridged data
+full.data<-read.csv("jena_climate_2009_2016.csv")
+full.data$Date.Time <- as.POSIXct(full.data$Date.Time, format="%d.%m.%Y %H:%M:%S")
+full.data$Date <- as.Date(full.data$Date.Time)
+full.data$Date.Hour <- format(full.data$Date.Time,"%d.%m.%Y %H")
+```
+
+
+```{r}
+df <- data.frame(datetime = full.data$Date.Time, date.hour = full.data$Date.Hour, date = full.data$Date, pressure = full.data$p..mbar., temperature = full.data$Tpot..K., humidity = full.data$sh..g.kg.)
+```
+
+```{r}
+data.daily <- aggregate(df[-c(1,2,3)], list(df$date), mean)
+colnames(data.daily) <- c("date", "pressure", "temperature", "humidity")
+data.daily$month <- month(data.daily$date)
+
+training.data <- data.daily[1:2915,]
+training.date <- data.daily[1:2914,1]
+testing.data <- data.daily[2915:2921,]
+testing.date <- data.daily[2915:2921,1]
+training.month <- data.daily[1:2891,5]
+testing.month <- data.daily[2915:2921,5]
+
+ts.pressure.daily <- ts(data.daily$pressure, frequency = 365, start=c(2009,1))
+ts.temperature.daily <- ts(data.daily$temperature, frequency = 365, start=c(2009,1))
+ts.humidity.daily <- ts(data.daily$humidity, frequency = 365, start=c(2009,1))
+```
+
+
+```{r}
+data.hourly <- aggregate(df[-c(1,2,3)], list(df$date.hour), mean)
+colnames(data.hourly) <- c("date.hour", "pressure", "temperature", "humidity")
+```
+
+```{r}
+ts.plot(ts.pressure.daily, type="l", main=paste("pressure"),ylab="")
+ts.plot(ts.temperature.daily, type="l", main=paste("temperature"),ylab="")
+ts.plot(ts.humidity.daily, type="l", main=paste("humidity"),ylab="")
+```
+
+```{r}
+stats::acf(as.matrix(data.daily[-c(1,5)]))
+```
+
+## Model each of the time series separetely using Non-parametric trend and ANOVA monthly seasonality
+
+```{r}
+time.pts = c(1:length(ts.pressure.daily))
+time.pts = c(time.pts - min(time.pts))/max(time.pts)
+gam1.fitted = gam(ts.pressure.daily ~ s(time.pts)+factor(data.daily$month))
+summary(gam1.fitted)
+```
+
+```{r}
+gam2.fitted = gam(ts.temperature.daily ~ s(time.pts)+factor(data.daily$month))
+summary(gam2.fitted)
+```
+
+
+```{r}
+gam3.fitted = gam(ts.humidity.daily ~ s(time.pts)+factor(data.daily$month))
+summary(gam3.fitted)
+```
+*Response*: Based on the model outputs above we can conclude the following: for all 3 models the monthly seasonality is significant. Trend is also significant for all 3 models.  
+
+```{r}
+gam1.fitted.ts = ts(fitted(gam1.fitted), freq = 365, start = c(2009,1))
+plot(ts.pressure.daily,ylab="Pressure", col="black")
+lines(gam1.fitted.ts, lwd=1.5,col="purple")
+legend(x="topleft", legend=c("Pressure", "Non-parametric trend and monthly seasonality using ANOVA"), fill = c("black", "purple"), cex=0.7, lty=1)
+
+gam2.fitted.ts = ts(fitted(gam2.fitted), freq = 365, start = c(2009,1))
+plot(ts.temperature.daily,ylab="Temperature", col="black")
+lines(gam2.fitted.ts, lwd=1.5,col="purple")
+legend(x="topleft", legend=c("Temperature", "Non-parametric trend and monthly seasonality using ANOVA"), fill = c("black", "purple"), cex=0.7, lty=1)
+
+gam3.fitted.ts = ts(fitted(gam3.fitted), freq = 365, start = c(2009,1))
+plot(ts.humidity.daily,ylab="Humidity", col="black")
+lines(gam3.fitted.ts, lwd=1.5,col="purple")
+legend(x="topleft", legend=c("Humidity", "Non-parametric trend and monthly seasonality using ANOVA"), fill = c("black", "purple"), cex=0.7, lty=1)
+```
+
+*Response*: Looking at the plots above, we can see that for all 3 time series we were able to capture the main pattern, especially it is visible for temperature and humidity time series that have clear seasonality patterns.
+
+## Residual Analysis
+
+```{r}
+ts.plot(ts(gam1.fitted$residuals, frequency = 365, start = c(2009,1)))
+acf(gam1.fitted$residuals, lag.max = 40)
+pacf(gam1.fitted$residuals, lag.max = 40)
+adf.test(gam1.fitted$residuals, k=1)
+adf.test(gam1.fitted$residuals, k=5)
+kpss.test(gam1.fitted$residuals)
+```
+
+*Response*: Looking at the time series plot variance seems to be somewhat constant. On the ACF plot we see that most of the values after lag 7 are within the confidence band, which indicates stationarity. Results of Augmented Dickey-Fuller Test and KPSS test also suggest stationary data. To conclude, based on time series plot, ACF plot and results of the test for stationarity we conclude that the residuals of the first model are stationary.  
+
+```{r}
+ts.plot(ts(gam2.fitted$residuals, frequency = 365, start = c(2009,1)))
+acf(gam2.fitted$residuals, lag.max = 40)
+pacf(gam2.fitted$residuals, lag.max = 40)
+adf.test(gam2.fitted$residuals, k=1)
+adf.test(gam2.fitted$residuals, k=5)
+kpss.test(gam2.fitted$residuals)
+```
+
+*Response*: Looking at the time series plot variance seems to be constant, but there are several outliers. On the ACF plot we see that most of the values after lag 8 are within the confidence band, which indicates stationarity. However, there are might be a seasonal pattern left in the residuals. Results of Augmented Dickey-Fuller Test and KPSS test suggest stationary data. Based on time series plot, ACF plot and results of the test for stationarity we conclude that the residuals of the second model seem to be stationary. 
+
+```{r}
+ts.plot(ts(gam3.fitted$residuals, frequency = 365, start = c(2009,1)))
+acf(gam3.fitted$residuals, lag.max = 40)
+pacf(gam3.fitted$residuals, lag.max = 40)
+adf.test(gam3.fitted$residuals, k=1)
+adf.test(gam3.fitted$residuals, k=5)
+kpss.test(gam3.fitted$residuals)
+```
+*Response*: Looking at the time series plot variance mostly seems to be constant. On the ACF plot we see a seasonal pattern, which indicates non stationarity. However, results of Augmented Dickey-Fuller Test and KPSS both test suggest stationary data. So there is not enough evidence to indicate non stationary data. To conclude, based on time series plot, ACF plot and results of the test for stationarity we conclude that the residuals of the third model are close to stationary, but we cannot say for sure. 
+
+
+## ARMA: Pressure
+```{r}
+#harmonic <- cbind(sin(data.daily$month*2*pi/7),cos(data.daily$month*2*pi/7))
+#colnames(harmonic) <- c("Sin","Cos")
+
+#arima4 <- arima(ts.temperature.daily, order = c(p[i],1,q[j]), method='ML', xreg=harmonic)
+```
+
+```{r}
+## Fit an ARMA model to the log transformed time series
+n <- length(ts.pressure.daily) 
+norder <- 9
+p = c(1:norder)-1; q = c(1:norder)-1
+aic <- matrix(0,norder,norder)
+for(i in 1:norder){
+  for(j in 1:norder){
+    modij <- arima(ts.pressure.daily, order = c(p[i],1,q[j]), method='ML')
+    aic[i,j] <- modij$aic
+  }  
+}
+
+# Extract the "best" one according to AIC
+aicv <- as.vector(aic)  
+plot(aicv,ylab="AIC values")
+indexp <- rep(c(1:norder),norder)
+indexq <- rep(c(1:norder),each=norder)
+indexaic <- which(aicv == min(aicv))
+porder <- indexp[indexaic]-1
+qorder <- indexq[indexaic]-1
+cat("Order of the selected model is: AR order p =", porder, "; MA order q =", qorder)
+cat("The best model AIC is", aicv[indexaic])
+```
+```{r}
+arma1 <- arima(ts.pressure.daily, order = c(0,1,8), method='ML')
+arma1
+```
+```{r}
+## compute the test statistics
+testval <-
+  as.numeric(arma1$coef) / as.numeric(sqrt(diag(arma1$var.coef)))
+
+## print t-statistic
+print(testval)
+
+## print p-values
+print(2*(1-pnorm(abs(testval))))
+
+## print significant coefficients for significance level 0.05
+which(abs(testval)>qnorm((1-0.05/2)))
+```
+
+```{r}
+pressure.fitted.ts = ts(fitted(arma1), freq = 365, start = c(2009,1))
+plot(ts.pressure.daily,ylab="Pressure", col="black")
+lines(pressure.fitted.ts, lwd=0.3,col="green")
+legend(x="topleft", legend=c("Pressure", "ARIMA(0,1,8)"), fill = c("black", "green"), cex=0.7, lty=1)
+
+ts.plot(ts(residuals(arma1), frequency = 365, start = c(2009,1)))
+```
+```{r}
+acf(residuals(arma1), lag.max = 365*2)
+adf.test(residuals(arma1), k=1)
+adf.test(residuals(arma1), k=5)
+kpss.test(residuals(arma1))
+qqnorm(residuals(arma1))
+qqline(residuals(arma1))
+
+#perform shapiro-wilk test
+shapiro.test(residuals(arma1))
+Box.test(residuals(arma1), lag = (8 + 1), type = "Ljung-Box", fitdf = 8)
+```
+
+Shapiro-Wilk normality test shows that the residuals are not normally distributed because it rejects the null hypothesis of normal distribution. The QQ plot also shows heavier tails than for normal distribution. We conclude that the residuals does not follow normal distribution, which is required for model fitting using MLE. The Ljung-Box test gives a p-value of 0.4 and there is no strong evidence that the residuals are correlated as we fail to reject the null hypothesis of non correlated.
+
+
+** ARMA: Tempereture
+
+```{r}
+## Fit an ARMA model to the log transformed time series
+n <- length(ts.temperature.daily) 
+norder <- 9
+p = c(1:norder)-1; q = c(1:norder)-1
+aic <- matrix(0,norder,norder)
+for(i in 1:norder){
+  for(j in 1:norder){
+    modij <- arima(ts.temperature.daily, order = c(p[i],1,q[j]), method='ML')
+    aic[i,j] <- modij$aic
+  }  
+}
+
+# Extract the "best" one according to AIC
+aicv <- as.vector(aic)  
+plot(aicv,ylab="AIC values")
+indexp <- rep(c(1:norder),norder)
+indexq <- rep(c(1:norder),each=norder)
+indexaic <- which(aicv == min(aicv))
+porder <- indexp[indexaic]-1
+qorder <- indexq[indexaic]-1
+cat("Order of the selected model is: AR order p =", porder, "; MA order q =", qorder)
+cat("The best model AIC is", aicv[indexaic])
+```
+
+```{r}
+arma2 <- arima(ts.temperature.daily, order = c(8,1,8), method='ML')
+arma2
+```
+
+```{r}
+temperature.fitted.ts = ts(fitted(arma2), freq = 365, start = c(2009,1))
+plot(ts.temperature.daily,ylab="Temperature", col="black")
+lines(temperature.fitted.ts, lwd=0.3,col="green")
+legend(x="topleft", legend=c("Temperature", "ARIMA(8,1,8)"), fill = c("black", "green"), cex=0.7, lty=1)
+
+ts.plot(ts(residuals(arma2), frequency = 365, start = c(2009,1)))
+
+acf(residuals(arma2), lag.max = 365*2)
+adf.test(residuals(arma2), k=1)
+adf.test(residuals(arma2), k=5)
+kpss.test(residuals(arma2))
+qqnorm(residuals(arma2))
+qqline(residuals(arma2))
+
+#perform shapiro-wilk test
+shapiro.test(residuals(arma2))
+Box.test(residuals(arma2), lag = (8 + 1), type = "Ljung-Box", fitdf = 8)
+```
+
+```{r}
+## compute the test statistics
+testval <-
+  as.numeric(arma1$coef) / as.numeric(sqrt(diag(arma2$var.coef)))
+
+## print t-statistic
+print(testval)
+
+## print p-values
+print(2*(1-pnorm(abs(testval))))
+
+## print significant coefficients for significance level 0.05
+which(abs(testval)>qnorm((1-0.05/2)))
+```
+
+
+
+** ARMA Humidity
+```{r}
+## Fit an ARMA model to the log transformed time series
+n <- length(ts.humidity.daily) 
+norder <- 9
+p = c(1:norder)-1; q = c(1:norder)-1
+aic <- matrix(0,norder,norder)
+for(i in 1:norder){
+  for(j in 1:norder){
+    modij <- arima(ts.humidity.daily, order = c(p[i],1,q[j]), method='ML')
+    aic[i,j] <- modij$aic
+  }  
+}
+
+# Extract the "best" one according to AIC
+aicv <- as.vector(aic)  
+plot(aicv,ylab="AIC values")
+indexp <- rep(c(1:norder),norder)
+indexq <- rep(c(1:norder),each=norder)
+indexaic <- which(aicv == min(aicv))
+porder <- indexp[indexaic]-1
+qorder <- indexq[indexaic]-1
+cat("Order of the selected model is: AR order p =", porder, "; MA order q =", qorder)
+cat("The best model AIC is", aicv[indexaic])
+```
+
+```{r}
+arma3 <- arima(ts.humidity.daily, order = c(6,1,8), method='ML')
+arma3
+```
+
+```{r}
+humidity.fitted.ts = ts(fitted(arma3), freq = 365, start = c(2009,1))
+plot(ts.humidity.daily,ylab="Humidity", col="black")
+lines(humidity.fitted.ts, lwd=0.3,col="green")
+legend(x="topleft", legend=c("Humidity", "ARIMA(6,1,8)"), fill = c("black", "green"), cex=0.7, lty=1)
+
+ts.plot(ts(residuals(arma3), frequency = 365, start = c(2009,1)))
+
+acf(residuals(arma3), lag.max = 365*2)
+adf.test(residuals(arma3), k=1)
+adf.test(residuals(arma3), k=5)
+kpss.test(residuals(arma3))
+qqnorm(residuals(arma3))
+qqline(residuals(arma3))
+
+#perform shapiro-wilk test
+shapiro.test(residuals(arma3))
+Box.test(residuals(arma3), lag = (8 + 1), type = "Ljung-Box", fitdf = 8)
+```
+
+```{r}
+## compute the test statistics
+testval <-
+  as.numeric(arma1$coef) / as.numeric(sqrt(diag(arma3$var.coef)))
+
+## print t-statistic
+print(testval)
+
+## print p-values
+print(2*(1-pnorm(abs(testval))))
+
+## print significant coefficients for significance level 0.05
+which(abs(testval)>qnorm((1-0.05/2)))
+```
+
+```{r}
+library(vars)
+library(MASS)
+VARselect(cbind(ts.pressure.daily,ts.temperature.daily,ts.humidity.daily), lag.max = 10, season= 7, type="const")$selection
+model.var <- VAR(cbind(ts.pressure.daily,ts.temperature.daily,ts.humidity.daily), p = 5, season = 7, type="const")
+```
+```{r}
+model.var.restricted <- restrict(model.var, thresh = qt(0.05/2,778))
+```
+```{r}
+plot(ts(residuals(model.var)), main = "Residual process of VAR")
+
+vars::arch.test(model.var)
+normality.test(model.var)
+serial.test(model.var)
+```
+
+```{r}
+exogen <-  cbind(ts.humidity.daily,ts.temperature.daily)
+harmonic <- sin(wday(data.daily$date)*2*pi/7)+cos(wday(data.daily$date)*2*pi/7)
+ts.harmonic <- ts(harmonic, frequency = 365, start=c(2009,1))
+VARselect(ts.pressure.daily, lag.max = 10,exogen=exogen, type = "const")$selection
+```
+
+```{r}
+model_varx <- VAR(cbind(ts.pressure.daily, ts.harmonic), p = 3, type = "both", exogen = cbind(ts.humidity.daily,ts.temperature.daily))
+```
+```{r}
+plot(ts(residuals(model_varx$varresult$ts.pressure.daily)), main = "Residual process of VARX")
+```
+```{r}
+fore.var <- predict(model.var, n.ahead = 7, ci=0.95)
+predict.var <- fore.var$fcst$ts.pressure.daily
+fore.var.restricted <- predict(model.var.restricted, n.ahead = 7, ci = 0.95)
+predict.var.restricted <- fore.var.restricted$fcst$ts.pressure.daily
+fore.varx <- predict(model_varx, n.ahead = 7, ci = 0.95, dumvar = cbind(exogen[2915:2921, ]))
+fore.gam <- gam1.fitted.ts[2915:2921]
+fore.arma <- predict(arma1, n.ahead = 7, ci=0.95)
+prediction <- predict(gam1.fitted, type = "response", se.fit = TRUE)
+se <- prediction$se.fit
+se <- se[2915:2921]
+```
+```{r}
+plot(testing.date, data.daily[2915:2921,2],type = "l", xlab = "Time", ylab = "Daily Pressure", col = "black",ylim = c(960,1015))
+lines(testing.data[,1], fore.var$fcst$ts.pressure.daily[,2], col = "red", lw = 1.5)
+lines(testing.data[,1], fore.var$fcst$ts.pressure.daily[,3], col = "red", lw = 1.5)
+points(testing.data[,1], fore.var$fcst$ts.pressure.daily[,1], col = "red")
+lines(testing.data[,1], fore.var.restricted$fcst$ts.pressure.daily[,2], col = "blue")
+lines(testing.data[,1], fore.var.restricted$fcst$ts.pressure.daily[,3], col = "blue")
+points(testing.data[,1], fore.var.restricted$fcst$ts.pressure.daily[,1], col = "blue")
+lines(testing.data[,1], fore.varx$fcst$ts.pressure.daily[,2], col = "orange")
+lines(testing.data[,1], fore.varx$fcst$ts.pressure.daily[,3], col = "orange")
+points(testing.data[,1], fore.varx$fcst$ts.pressure.daily[,1], col = "orange")
+lines(testing.data[,1], fore.arma$pred-1.96*fore.arma$se, col = "green")
+lines(testing.data[,1], fore.arma$pred+1.96*fore.arma$se, col = "green")
+points(testing.data[,1], fore.arma$pred, col = "green")
+lines(testing.data[,1], fore.gam+1.96*se, col = "purple")
+lines(testing.data[,1], fore.gam-1.96*se, col = "purple")
+points(testing.data[,1], fore.gam, col = "purple")
+legend('topleft', legend = c("VAR", "Restricted VAR", "VARX", "ARMA", "GAM"),
+       lwd = 2, col = c("red", "blue", "orange", "green", "purple"),
+       inset = c(0, 0))
+```
+
