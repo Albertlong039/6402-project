@@ -178,9 +178,9 @@ kpss.test(gam3.fitted$residuals)
 #### Pressure
 ```{r}
 
-prediction.h <- c()
-prediction.p <- c()
-prediction.t <- c()
+prediction.h.gam <- c()
+prediction.p.gam <- c()
+prediction.t.gam <- c()
 
 for (i in 1:6) {
   data <- daily.training.data
@@ -194,32 +194,44 @@ for (i in 1:6) {
   new.data$tps <- tps[(nrow(data) + 1):(nrow(data) + 7)]
   
   gam.p <- gam(pressure ~ s(tps)+factor(month), data = data)
-  prediction.p <- c(prediction.p, predict.gam(gam.p, new.data))
+  predict.p <- predict(gam.p, new.data, se.fit = TRUE)
+  lb <- predict.p$fit - 1.96 * predict.p$se.fit
+  ub <- predict.p$fit + 1.96 * predict.p$se.fit
+  temp <- data.frame('prediction' = predict.p$fit, 'lower' = lb, 'upper' = ub)
+  prediction.p.gam <- rbind(prediction.p.gam,temp)
   
   gam.t <- gam(temperature ~ s(tps)+factor(month), data = data)
-  prediction.t <- c(prediction.t, predict.gam(gam.t, new.data))
+  predict.t <- predict(gam.t, new.data, se.fit = TRUE)
+  lb <- predict.t$fit - 1.96 * predict.t$se.fit
+  ub <- predict.t$fit + 1.96 * predict.t$se.fit
+  temp <- data.frame('prediction' = predict.t$fit, 'lower' = lb, 'upper' = ub)
+  prediction.t.gam <- rbind(prediction.t.gam,temp)
   
   gam.h <- gam(humidity ~ s(tps)+factor(month), data = data)
-  prediction.h <- c(prediction.h, predict.gam(gam.h, new.data))
+  predict.h <- predict(gam.h, new.data, se.fit = TRUE)
+  lb <- predict.h$fit - 1.96 * predict.h$se.fit
+  ub <- predict.h$fit + 1.96 * predict.h$se.fit
+  temp <- data.frame('prediction' = predict.h$fit, 'lower' = lb, 'upper' = ub)
+  prediction.h.gam <- rbind(prediction.h.gam,temp)
 }
 
 gam.prediction <- data.frame('date' = daily.testing.data$date,
-                             'pressure' = prediction.p,
-                             'temperature' = prediction.t,
-                             'humidity' = prediction.h,
+                             'pressure' = prediction.p.gam,
+                             'temperature' = prediction.t.gam,
+                             'humidity' = prediction.h.gam,
                              'month' = daily.testing.data$month)
 
 plot(daily.testing.data$date, daily.testing.data$pressure, type = 'l', ylim = c(980,1020), main = 'Pressure Prediction', ylab = 'Pressure', xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.p, pch = 1, col = 'red', ylim = c(980,1020), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.p.gam$prediction, pch = 1, col = 'red', ylim = c(980,1020), ylab = '', cex = 0.8, xlab = 'Date')
 
 plot(daily.testing.data$date, daily.testing.data$temperature, ylim = c(268,285), main = 'Temperature Prediction', ylab = 'Temperature', type = 'l', xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.t, col = 'red', ylim = c(268,285),ylab = '', pch = 1, cex = 0.8, xlab = 'Date')
+plot(daily.testing.data$date, prediction.t.gam$prediction, col = 'red', ylim = c(268,285),ylab = '', pch = 1, cex = 0.8, xlab = 'Date')
 
 plot(daily.testing.data$date, daily.testing.data$humidity, ylim = c(2,6), main = 'Humidity Prediction',ylab = 'Humidity', type = 'l', xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.h, col = 'red', ylim = c(2,6),ylab = '', pch = 1, cex = 0.8, xlab = 'Date')
+plot(daily.testing.data$date, prediction.h.gam$prediction, col = 'red', ylim = c(2,6),ylab = '', pch = 1, cex = 0.8, xlab = 'Date')
 ```
 
 
@@ -414,12 +426,12 @@ For all 3 models we see the similar results:
 
 ### Prediction
 ```{r, eval = FALSE}
-prediction.p <- data.frame(Inf, Inf, Inf)
-names(prediction.p) <- c('prediction', 'lower', 'upper')
-prediction.t <- data.frame(Inf, Inf, Inf)
-names(prediction.t) <- c('prediction', 'lower', 'upper')
-prediction.h <- data.frame(Inf, Inf, Inf)
-names(prediction.h) <- c('prediction', 'lower', 'upper')
+prediction.p.arima <- data.frame(Inf, Inf, Inf)
+names(prediction.p.arima) <- c('prediction', 'lower', 'upper')
+prediction.t.arima <- data.frame(Inf, Inf, Inf)
+names(prediction.t.arima) <- c('prediction', 'lower', 'upper')
+prediction.h.arima <- data.frame(Inf, Inf, Inf)
+names(prediction.h.arima) <- c('prediction', 'lower', 'upper')
 
 for (i in 1:6) {
   data <- daily.training.data
@@ -435,7 +447,7 @@ for (i in 1:6) {
   lb <- arma.pred.p$pred - 1.96 * arma.pred.p$se
   ub <- arma.pred.p$pred + 1.96 * arma.pred.p$se
   temp <- data.frame('prediction' = arma.pred.p$pred, 'lower' = lb, 'upper' = ub)
-  prediction.p <- rbind(prediction.p, temp)
+  prediction.p.arima <- rbind(prediction.p.arima, temp)
   
   arma.t <- Arima(data$temperature,order=c(8,1,4), 
                   xreg=as.matrix(harmonic.all[1:nrow(data),]))
@@ -444,7 +456,7 @@ for (i in 1:6) {
   lb <- arma.pred.t$pred - 1.96 * arma.pred.t$se
   ub <- arma.pred.t$pred + 1.96 * arma.pred.t$se
   temp <- data.frame('prediction' = arma.pred.t$pred, 'lower' = lb, 'upper' = ub)
-  prediction.t <- rbind(prediction.t, temp)
+  prediction.t.arima <- rbind(prediction.t.arima, temp)
   
   arma.h <- Arima(data$humidity,order=c(5,0,1), 
                   xreg=as.matrix(harmonic.all[1:nrow(data),]))
@@ -453,18 +465,18 @@ for (i in 1:6) {
   lb <- arma.pred.h$pred - 1.96 * arma.pred.h$se
   ub <- arma.pred.h$pred + 1.96 * arma.pred.h$se
   temp <- data.frame('prediction' = arma.pred.h$pred, 'lower' = lb, 'upper' = ub)
-  prediction.h <- rbind(prediction.h, temp)
+  prediction.h.arima <- rbind(prediction.h.arima, temp)
 }
-prediction.p <- prediction.p[-1,]
-prediction.p$date <- daily.testing.data$date
+prediction.p.arima <- prediction.p.arima[-1,]
+prediction.p.arima$date <- daily.testing.data$date
 
-prediction.t <- prediction.t[-1,]
-prediction.t$date <- daily.testing.data$date
+prediction.t.arima <- prediction.t.arima[-1,]
+prediction.t.arima$date <- daily.testing.data$date
 
-prediction.h <- prediction.h[-1,]
-prediction.h$date <- daily.testing.data$date
+prediction.h.arima <- prediction.h.arima[-1,]
+prediction.h.arima$date <- daily.testing.data$date
 
-armax.prediction <- list(prediction.p, prediction.t, prediction.h)
+armax.prediction <- list(prediction.p.arima, prediction.t.arima, prediction.h.arima)
 save(armax.prediction, file = 'armax-prediction.RData')
 ```
 
@@ -472,34 +484,34 @@ save(armax.prediction, file = 'armax-prediction.RData')
 ```{r}
 
 load('armax-prediction.RData')
-prediction.p <- armax.prediction[[1]]
-prediction.t <- armax.prediction[[2]]
-prediction.h <- armax.prediction[[3]]
+prediction.p.armax <- armax.prediction[[1]]
+prediction.t.armax <- armax.prediction[[2]]
+prediction.h.armax <- armax.prediction[[3]]
 
 
 plot(daily.testing.data$date, daily.testing.data$pressure, type = 'l', ylim = c(970,1020), main = 'Pressure Prediction', ylab = 'Pressure', xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.p$prediction, type = 'l', col = 'red', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.p.armax$prediction, type = 'l', col = 'red', ylim = c(970,1020), ylab = '', lwd = 1.5, xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.p$lower, type = 'l', col = 'blue', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.p.armax$lower, type = 'l', col = 'blue', ylim = c(970,1020), ylab = '', lwd = 1.5, xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.p$upper, type = 'l', col = 'blue', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.p.armax$upper, type = 'l', col = 'blue', ylim = c(970,1020), ylab = '', lwd = 1.5, xlab = 'Date')
 
 plot(daily.testing.data$date, daily.testing.data$temperature, type = 'l', ylim = c(264,289), main = 'Temperature Prediction', ylab = 'Temperature', xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.t$prediction, type = 'l', col = 'red', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.t.armax$prediction, type = 'l', col = 'red', ylim = c(264,289), ylab = '', lwd = 1.5, xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.t$lower, type = 'l', col = 'blue', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.t.armax$lower, type = 'l', col = 'blue', ylim = c(264,289), ylab = '', lwd = 1.5, xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.t$upper, type = 'l', col = 'blue', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.t.armax$upper, type = 'l', col = 'blue', ylim = c(264,289), ylab = '', lwd = 1.5, xlab = 'Date')
 
 plot(daily.testing.data$date, daily.testing.data$humidity, type = 'l', ylim = c(0.5,8), main = 'Humidity Prediction', ylab = 'Humidity', xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.h$prediction, type = 'l', col = 'red', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.h.armax$prediction, type = 'l', col = 'red', ylim = c(0.5,8), ylab = '', lwd = 1.5, xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.h$lower, type = 'l', col = 'blue', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.h.armax$lower, type = 'l', col = 'blue', ylim = c(0.5,8), ylab = '', lwd = 1.5, xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.h$upper, type = 'l', col = 'blue', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.h.armax$upper, type = 'l', col = 'blue', ylim = c(0.5,8), ylab = '', lwd = 1.5, xlab = 'Date')
 
 
 ```
@@ -876,12 +888,12 @@ qqline(residuals(hum.arma.garch))
 
 ## Arma-Garch Prediction
 ```{r, eval = FALSE}
-prediction.p <- data.frame(Inf, Inf, Inf)
-names(prediction.p) <- c('prediction', 'lower', 'upper')
-prediction.t <- data.frame(Inf, Inf, Inf)
-names(prediction.t) <- c('prediction', 'lower', 'upper')
-prediction.h <- data.frame(Inf, Inf, Inf)
-names(prediction.h) <- c('prediction', 'lower', 'upper')
+prediction.p.arma.garch <- data.frame(Inf, Inf, Inf)
+names(prediction.p.arma.garch) <- c('prediction', 'lower', 'upper')
+prediction.t.arma.garch <- data.frame(Inf, Inf, Inf)
+names(prediction.t.arma.garch) <- c('prediction', 'lower', 'upper')
+prediction.h.arma.garch <- data.frame(Inf, Inf, Inf)
+names(prediction.h.arma.garch) <- c('prediction', 'lower', 'upper')
 
 for (i in 1:6) {
   data <- daily.training.data
@@ -901,7 +913,7 @@ for (i in 1:6) {
                      fore$seriesFor - 1.96 * fore$sigmaFor, 
                      fore$seriesFor + 1.96 * fore$sigmaFor)
   names(temp) <- c('prediction', 'lower', 'upper')
-  prediction.p <- rbind(prediction.p, temp)
+  prediction.p.arma.garch <- rbind(prediction.p.arma.garch, temp)
   
   
   spec.t = ugarchspec(variance.model=list(garchOrder=c(1,1)), 
@@ -916,7 +928,7 @@ for (i in 1:6) {
                      'lower' = fore$seriesFor - 1.96 * fore$sigmaFor, 
                      'upper' = fore$seriesFor + 1.96 * fore$sigmaFor)
   names(temp) <- c('prediction', 'lower', 'upper')
-  prediction.t <- rbind(prediction.t, temp)
+  prediction.t.arma.garch <- rbind(prediction.t.arma.garch, temp)
   
   spec.h = ugarchspec(variance.model=list(garchOrder=c(2,2)), 
                       mean.model=list(armaOrder=c(4,4), 
@@ -930,19 +942,19 @@ for (i in 1:6) {
                      'lower' = fore$seriesFor - 1.96 * fore$sigmaFor, 
                      'upper' = fore$seriesFor + 1.96 * fore$sigmaFor)
   names(temp) <- c('prediction', 'lower', 'upper')
-  prediction.h <- rbind(prediction.h, temp)
+  prediction.h.arma.garch <- rbind(prediction.h.arma.garch, temp)
   
 }
-prediction.p <- prediction.p[-1,]
-prediction.p$date <- daily.testing.data$date
+prediction.p.arma.garch <- prediction.p.arma.garch[-1,]
+prediction.p.arma.garch$date <- daily.testing.data$date
 
-prediction.t <- prediction.t[-1,]
-prediction.t$date <- daily.testing.data$date
+prediction.t.arma.garch <- prediction.t.arma.garch[-1,]
+prediction.t.arma.garch$date <- daily.testing.data$date
 
-prediction.h <- prediction.h[-1,]
-prediction.h$date <- daily.testing.data$date
+prediction.h.arma.garch <- prediction.h.arma.garch[-1,]
+prediction.h.arma.garch$date <- daily.testing.data$date
 
-arma.garch.prediction <- list(prediction.p, prediction.t, prediction.h)
+arma.garch.prediction <- list(prediction.p.arma.garch, prediction.t.arma.garch, prediction.h.arma.garch)
 save(arma.garch.prediction, file = 'arma-garch-prediction.RData')
 ```
 
@@ -950,33 +962,33 @@ save(arma.garch.prediction, file = 'arma-garch-prediction.RData')
 ### Prediction Plots
 ```{r}
 load('arma-garch-prediction.RData')
-prediction.p <- arma.garch.prediction[[1]]
-prediction.t <- arma.garch.prediction[[2]]
-prediction.h <- arma.garch.prediction[[3]]
+prediction.p.arma.garch <- arma.garch.prediction[[1]]
+prediction.t.arma.garch <- arma.garch.prediction[[2]]
+prediction.h.arma.garch <- arma.garch.prediction[[3]]
 
 plot(daily.testing.data$date, daily.testing.data$pressure, type = 'l', ylim = c(970,1020), main = 'Pressure Prediction', ylab = 'Pressure', xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.p$prediction, type = 'l', col = 'red', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.p.arma.garch$prediction, type = 'l', col = 'red', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.p$lower, type = 'l', col = 'blue', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.p.arma.garch$lower, type = 'l', col = 'blue', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.p$upper, type = 'l', col = 'blue', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.p.arma.garch$upper, type = 'l', col = 'blue', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
 
 plot(daily.testing.data$date, daily.testing.data$temperature, type = 'l', ylim = c(264,289), main = 'Temperature Prediction', ylab = 'Temperature', xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.t$prediction, type = 'l', col = 'red', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.t.arma.garch$prediction, type = 'l', col = 'red', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.t$lower, type = 'l', col = 'blue', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.t.arma.garch$lower, type = 'l', col = 'blue', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.t$upper, type = 'l', col = 'blue', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.t.arma.garch$upper, type = 'l', col = 'blue', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
 
 plot(daily.testing.data$date, daily.testing.data$humidity, type = 'l', ylim = c(0.5,8), main = 'Humidity Prediction', ylab = 'Humidity', xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.h$prediction, type = 'l', col = 'red', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.h.arma.garch$prediction, type = 'l', col = 'red', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.h$lower, type = 'l', col = 'blue', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.h.arma.garch$lower, type = 'l', col = 'blue', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.h$upper, type = 'l', col = 'blue', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.h.arma.garch$upper, type = 'l', col = 'blue', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
 ```
 # VAR modeling
 
@@ -994,12 +1006,12 @@ summary(var1)
 ```
 
 ```{r, eval=FALSE}
-prediction.p <- data.frame(Inf, Inf, Inf)
-names(prediction.p) <- c('fcst', 'lower', 'upper')
-prediction.t <- data.frame(Inf, Inf, Inf)
-names(prediction.t) <- c('fcst', 'lower', 'upper')
-prediction.h <- data.frame(Inf, Inf, Inf)
-names(prediction.h) <- c('fcst', 'lower', 'upper')
+prediction.p.var <- data.frame(Inf, Inf, Inf)
+names(prediction.p.var) <- c('fcst', 'lower', 'upper')
+prediction.t.var <- data.frame(Inf, Inf, Inf)
+names(prediction.t.var) <- c('fcst', 'lower', 'upper')
+prediction.h.var <- data.frame(Inf, Inf, Inf)
+names(prediction.h.var) <- c('fcst', 'lower', 'upper')
 
 for (i in 1:6) {
   data <- train.data
@@ -1012,54 +1024,54 @@ for (i in 1:6) {
   varx<-VAR(data,p=3, exogen=exo, type="both")
   pred <- predict(varx, n.ahead = 7, ci = 0.95, dumvar = new.exo)
   pred <- pred$fcst
-  prediction.p <- rbind(prediction.p, pred$pressure[,1:3])
-  prediction.t <- rbind(prediction.t, pred$temperature[,1:3])
-  prediction.h <- rbind(prediction.h, pred$humidity[,1:3])
+  prediction.p.var <- rbind(prediction.p.var, pred$pressure[,1:3])
+  prediction.t.var <- rbind(prediction.t.var, pred$temperature[,1:3])
+  prediction.h.var <- rbind(prediction.h.var, pred$humidity[,1:3])
 }
 
-prediction.p <- prediction.p[-1,]
-prediction.p$date <- daily.testing.data$date
+prediction.p.var <- prediction.p.var[-1,]
+prediction.p.var$date <- daily.testing.data$date
 
-prediction.t <- prediction.t[-1,]
-prediction.t$date <- daily.testing.data$date
+prediction.t.var <- prediction.t.var[-1,]
+prediction.t.var$date <- daily.testing.data$date
 
-prediction.h <- prediction.h[-1,]
-prediction.h$date <- daily.testing.data$date
+prediction.h.var <- prediction.h.var[-1,]
+prediction.h.var$date <- daily.testing.data$date
 
-varx.prediction <- list(prediction.p, prediction.t, prediction.h)
+varx.prediction <- list(prediction.p.var, prediction.t.var, prediction.h.var)
 save(varx.prediction, file = 'varx-prediction.RData')
 ```
 
 ### Prediction Plots
 ```{r}
 load('varx-prediction.RData')
-prediction.p <- varx.prediction[[1]]
-prediction.t <- varx.prediction[[2]]
-prediction.h <- varx.prediction[[3]]
+prediction.p.varx <- varx.prediction[[1]]
+prediction.t.varx <- varx.prediction[[2]]
+prediction.h.varx <- varx.prediction[[3]]
 
 plot(daily.testing.data$date, daily.testing.data$pressure, type = 'l', ylim = c(970,1020), main = 'Pressure Prediction', ylab = 'Pressure', xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.p$fcst, type = 'l', col = 'red', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.p.varx$fcst, type = 'l', col = 'red', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.p$lower, type = 'l', col = 'blue', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.p.varx$lower, type = 'l', col = 'blue', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.p$upper, type = 'l', col = 'blue', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.p.varx$upper, type = 'l', col = 'blue', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
 
 plot(daily.testing.data$date, daily.testing.data$temperature, type = 'l', ylim = c(264,289), main = 'Temperature Prediction', ylab = 'Temperature', xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.t$fcst, type = 'l', col = 'red', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.t.varx$fcst, type = 'l', col = 'red', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.t$lower, type = 'l', col = 'blue', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.t.varx$lower, type = 'l', col = 'blue', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.t$upper, type = 'l', col = 'blue', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.t.varx$upper, type = 'l', col = 'blue', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
 
 plot(daily.testing.data$date, daily.testing.data$humidity, type = 'l', ylim = c(0.5,8), main = 'Humidity Prediction', ylab = 'Humidity', xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.h$fcst, type = 'l', col = 'red', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.h.varx$fcst, type = 'l', col = 'red', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.h$lower, type = 'l', col = 'blue', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.h.varx$lower, type = 'l', col = 'blue', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
 par(new = T)
-plot(daily.testing.data$date, prediction.h$upper, type = 'l', col = 'blue', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
+plot(daily.testing.data$date, prediction.h.varx$upper, type = 'l', col = 'blue', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
 ```
 
 *Results*
@@ -1082,44 +1094,72 @@ summary(var.restrict.model)
 ```{r}
 col = wes_palette(n = 5, name = 'FantasticFox1')
 col <- col[-4]
-plot(daily.testing.data$date, daily.testing.data$pressure, type = 'l', ylim = c(970,1020), main = 'Pressure Prediction', ylab = 'Pressure', xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, gam.prediction$pressure, type = 'l', col = col[1], ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, arma.garch.prediction[[1]]$prediction, type = 'l', col = col[2], ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, varx.prediction[[1]]$fcst, type = 'l', col = col[3], ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, armax.prediction[[1]]$prediction, type = 'l', col = col[4], ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
-legend('bottomright', legend = c('observation', 'Nonparametric Trend + ANOVA Seasonality', 
-                                 'ARMA-GARCH', 'VARX', 'ARMAX'), col = c('black', col), lty = 1,
-       cex = 0.8)
+daily.testing.data$date <- as.POSIXct(daily.testing.data$date)
+point_size = 1.5
+line_width = 2
 
-plot(daily.testing.data$date, daily.testing.data$temperature, type = 'l', ylim = c(264,289), main = 'Pressure Prediction', ylab = 'Pressure', xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, gam.prediction$temperature, type = 'l', col = col[1], ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, arma.garch.prediction[[2]]$prediction, type = 'l', col = col[2], ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, varx.prediction[[2]]$fcst, type = 'l', col = col[3], ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, armax.prediction[[2]]$prediction, type = 'l', col = col[4], ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
-legend('bottomright', legend = c('observation', 'Nonparametric Trend + ANOVA Seasonality', 
-                                 'ARMA-GARCH', 'VARX', 'ARMAX'), col = c('black', col), lty = 1,
-       cex = 0.8)
+# Plot with custom x-axis labels
+plot(daily.testing.data$date, daily.testing.data$pressure, type = 'l', ylim = c(960,1020), main = 'Pressure Prediction', ylab = 'Pressure', xlab = 'Date', xaxt = 'n')
+axis(1, at = seq(from = min(daily.testing.data$date, na.rm = TRUE), to = max(daily.testing.data$date, na.rm = TRUE), by = "1 month"), labels = format(seq(from = min(daily.testing.data$date, na.rm = TRUE), to = max(daily.testing.data$date, na.rm = TRUE), by = "1 month"), "%Y-%m-%d"))
+points(daily.testing.data$date, gam.prediction$pressure, col = col[1], cex = point_size)
+lines(daily.testing.data$date, prediction.p.gam$lower, col = col[1], lwd = line_width)
+lines(daily.testing.data$date, prediction.p.gam$upper, col = col[1], lwd = line_width)
+points(daily.testing.data$date, arma.garch.prediction[[1]]$prediction, col = col[2], cex = point_size)
+lines(daily.testing.data$date, prediction.p.arma.garch$lower, col = col[2], lwd = line_width)
+lines(daily.testing.data$date, prediction.p.arma.garch$upper, col = col[2], lwd = line_width)
+points(daily.testing.data$date, varx.prediction[[1]]$fcst, col = col[3], cex = point_size)
+lines(daily.testing.data$date, prediction.p.varx$lower, col = col[3], lwd = line_width)
+lines(daily.testing.data$date, prediction.p.varx$upper, col = col[3], lwd = line_width)
+points(daily.testing.data$date, armax.prediction[[1]]$prediction, col = col[4], cex = point_size)
+lines(daily.testing.data$date, prediction.p.armax$lower, col = col[4], lwd = line_width)
+lines(daily.testing.data$date, prediction.p.armax$upper, col = col[4], lwd = line_width)
+legend('bottomleft', legend = c('observation', 'Nonpar.Trend+ANOVA S.', 
+                                 'ARMA-GARCH', 'VARX', 'ARMAX'), col = c('black', col), lty = 1)
 
-plot(daily.testing.data$date, daily.testing.data$humidity, type = 'l', ylim = c(1,6), main = 'Pressure Prediction', ylab = 'Pressure', xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, gam.prediction$humidity, type = 'l', col = col[1], ylim = c(1,6), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, arma.garch.prediction[[3]]$prediction, type = 'l', col = col[2], ylim = c(1,6), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, varx.prediction[[3]]$fcst, type = 'l', col = col[3], ylim = c(1,6), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, armax.prediction[[3]]$prediction, type = 'l', col = col[4], ylim = c(1,6), ylab = '', cex = 0.6, xlab = 'Date')
-legend('bottomright', legend = c('observation', 'Nonparametric Trend + ANOVA Seasonality', 
-                                 'ARMA-GARCH', 'VARX', 'ARMAX'), col = c('black', col), lty = 1,
-       cex = 0.8)
+daily.testing.data$date <- as.POSIXct(daily.testing.data$date)
+plot(daily.testing.data$date, daily.testing.data$temperature, type = 'l', ylim = c(260,289), main = 'Temperature Prediction', ylab = 'Temperature', xlab = 'Date', xaxt = 'n')
+axis(1, at = seq(from = min(daily.testing.data$date, na.rm = TRUE), 
+                 to = max(daily.testing.data$date, na.rm = TRUE), 
+                 by = "1 month"), 
+    labels = format(seq(from = min(daily.testing.data$date, na.rm = TRUE),
+                        to = max(daily.testing.data$date, na.rm = TRUE),
+                        by = "1 month"), "%Y-%m-%d"))
+points(daily.testing.data$date, gam.prediction$temperature, col = col[1], cex = point_size, xlab = 'Date')
+lines(daily.testing.data$date, prediction.t.gam$lower, col = col[1], lwd = line_width)
+lines(daily.testing.data$date, prediction.t.gam$upper, col = col[1], lwd = line_width)
+points(daily.testing.data$date, arma.garch.prediction[[2]]$prediction, col = col[2], cex = point_size, xlab = 'Date')
+lines(daily.testing.data$date, prediction.t.arma.garch$lower, col = col[2], lwd = line_width)
+lines(daily.testing.data$date, prediction.t.arma.garch$upper, col = col[2], lwd = line_width)
+points(daily.testing.data$date, varx.prediction[[2]]$fcst, col = col[3], cex = point_size, xlab = 'Date')
+lines(daily.testing.data$date, prediction.t.varx$lower, col = col[3], lwd = line_width)
+lines(daily.testing.data$date, prediction.t.varx$upper, col = col[3], lwd = line_width)
+points(daily.testing.data$date, armax.prediction[[2]]$prediction, col = col[4], cex = point_size, xlab = 'Date')
+lines(daily.testing.data$date, prediction.t.armax$lower, col = col[4], lwd = line_width)
+lines(daily.testing.data$date, prediction.t.armax$upper, col = col[4], lwd = line_width)
+legend('bottomleft', legend = c('observation', 'Nonpar.Trend+ANOVA S.', 
+                                 'ARMA-GARCH', 'VARX', 'ARMAX'), col = c('black', col), lty =1)
+
+plot(daily.testing.data$date, daily.testing.data$humidity, type = 'l', ylim = c(0,8), main = 'Humidity Prediction', ylab = 'Humidity', xlab = 'Date', xaxt = 'n')
+axis(1, at = seq(from = min(daily.testing.data$date, na.rm = TRUE), 
+                 to = max(daily.testing.data$date, na.rm = TRUE), 
+                 by = "1 month"), 
+    labels = format(seq(from = min(daily.testing.data$date, na.rm = TRUE),
+                        to = max(daily.testing.data$date, na.rm = TRUE),
+                        by = "1 month"), "%Y-%m-%d"))
+points(daily.testing.data$date, gam.prediction$humidity, col = col[1], cex = point_size, xlab = 'Date')
+lines(daily.testing.data$date, prediction.h.gam$lower, col = col[1], lwd = line_width)
+lines(daily.testing.data$date, prediction.h.gam$upper, col = col[1], lwd = line_width)
+points(daily.testing.data$date, arma.garch.prediction[[3]]$prediction, col = col[2], cex = point_size, xlab = 'Date')
+lines(daily.testing.data$date, prediction.h.arma.garch$lower, col = col[2], lwd = line_width)
+lines(daily.testing.data$date, prediction.h.arma.garch$upper, col = col[2], lwd = line_width)
+points(daily.testing.data$date, varx.prediction[[3]]$fcst, col = col[3], cex = point_size, xlab = 'Date')
+lines(daily.testing.data$date, prediction.h.varx$lower, col = col[3], lwd = line_width)
+lines(daily.testing.data$date, prediction.h.varx$upper, col = col[3], lwd = line_width)
+points(daily.testing.data$date, armax.prediction[[3]]$prediction, col = col[4], cex = point_size, xlab = 'Date')
+lines(daily.testing.data$date, prediction.h.armax$lower, col = col[4], lwd = line_width)
+lines(daily.testing.data$date, prediction.h.armax$upper, col = col[4], lwd = line_width)
+legend('bottomleft', legend = c('observation', 'Nonpar.Trend+ANOVA S.', 
+                                 'ARMA-GARCH', 'VARX', 'ARMAX'), col = c('black', col), lty = 1)
 
 ```
 
