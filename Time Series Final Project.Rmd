@@ -481,7 +481,7 @@ prediction.h.arima <- prediction.h.arima[-1,]
 prediction.h.arima$date <- daily.testing.data$date
 
 armax.prediction <- list(prediction.p.arima, prediction.t.arima, prediction.h.arima)
-save(armax.prediction, file = 'armax-prediction.RData')
+# save(armax.prediction, file = 'armax-prediction.RData')
 ```
 
 ### Prediction Plots
@@ -959,7 +959,7 @@ prediction.h.arma.garch <- prediction.h.arma.garch[-1,]
 prediction.h.arma.garch$date <- daily.testing.data$date
 
 arma.garch.prediction <- list(prediction.p.arma.garch, prediction.t.arma.garch, prediction.h.arma.garch)
-save(arma.garch.prediction, file = 'arma-garch-prediction.RData')
+# save(arma.garch.prediction, file = 'arma-garch-prediction.RData')
 ```
 
 
@@ -1043,7 +1043,7 @@ prediction.h.var <- prediction.h.var[-1,]
 prediction.h.var$date <- daily.testing.data$date
 
 varx.prediction <- list(prediction.p.var, prediction.t.var, prediction.h.var)
-save(varx.prediction, file = 'varx-prediction.RData')
+# save(varx.prediction, file = 'varx-prediction.RData')
 ```
 
 ### Prediction Plots
