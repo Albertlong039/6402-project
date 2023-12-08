@@ -84,6 +84,7 @@ ts.plot(daily.humidity.train.ts, type="l", main=paste("humidity"),ylab="")
 
 ```{r}
 stats::acf(as.matrix(daily.training.data[-c(1,5)]))
+
 ```
 
 ## Non-parametric trend and ANOVA monthly seasonality
@@ -222,16 +223,19 @@ gam.prediction <- data.frame('date' = daily.testing.data$date,
                              'month' = daily.testing.data$month)
 
 plot(daily.testing.data$date, daily.testing.data$pressure, type = 'l', ylim = c(980,1020), main = 'Pressure Prediction', ylab = 'Pressure', xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.p.gam$prediction, pch = 1, col = 'red', ylim = c(980,1020), ylab = '', cex = 0.8, xlab = 'Date')
+points(daily.testing.data$date, prediction.p.gam$prediction, col = 'red', ylim = c(268,285),ylab = '', pch = 1, cex = 0.8, xlab = 'Date')
+lines(daily.testing.data$date, prediction.p.gam$lower, col = 'red', ylim = c(268,285),ylab = '', pch = 1, cex = 0.8, xlab = 'Date')
+lines(daily.testing.data$date, prediction.p.gam$upper, col = 'red', ylim = c(268,285),ylab = '', pch = 1, cex = 0.8, xlab = 'Date')
 
 plot(daily.testing.data$date, daily.testing.data$temperature, ylim = c(268,285), main = 'Temperature Prediction', ylab = 'Temperature', type = 'l', xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.t.gam$prediction, col = 'red', ylim = c(268,285),ylab = '', pch = 1, cex = 0.8, xlab = 'Date')
+points(daily.testing.data$date, prediction.t.gam$prediction, col = 'red', ylim = c(268,285),ylab = '', pch = 1, cex = 0.8, xlab = 'Date')
+lines(daily.testing.data$date, prediction.t.gam$lower, col = 'red', ylim = c(268,285),ylab = '', pch = 1, cex = 0.8, xlab = 'Date')
+lines(daily.testing.data$date, prediction.t.gam$upper, col = 'red', ylim = c(268,285),ylab = '', pch = 1, cex = 0.8, xlab = 'Date')
 
 plot(daily.testing.data$date, daily.testing.data$humidity, ylim = c(2,6), main = 'Humidity Prediction',ylab = 'Humidity', type = 'l', xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.h.gam$prediction, col = 'red', ylim = c(2,6),ylab = '', pch = 1, cex = 0.8, xlab = 'Date')
+points(daily.testing.data$date, prediction.h.gam$prediction, col = 'red', ylim = c(268,285),ylab = '', pch = 1, cex = 0.8, xlab = 'Date')
+lines(daily.testing.data$date, prediction.h.gam$lower, col = 'red', ylim = c(268,285),ylab = '', pch = 1, cex = 0.8, xlab = 'Date')
+lines(daily.testing.data$date, prediction.h.gam$upper, col = 'red', ylim = c(268,285),ylab = '', pch = 1, cex = 0.8, xlab = 'Date')
 ```
 
 
