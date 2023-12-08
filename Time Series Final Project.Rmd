@@ -12,7 +12,7 @@ date: "2023-11-20"
 # 3. turn off all the warnings and messages
 
 knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_chunk$set(fig.width = 12, fig.height = 8)
+knitr::opts_chunk$set(fig.width = 8, fig.height = 4)
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 ```
 
@@ -27,13 +27,11 @@ library(tseries)
 library(vars)
 library(rugarch)
 library(forecast)
-library(wesanderson)
-library(knitr)
 ```
 
 ```{r load data}
 #Read in data, split into full and abridged data
-full.data<-read.csv("jena_climate_2009_2016.csv")
+full.data<-read.csv("/Users/Vera/Downloads/jena_climate_2009_2016.csv")
 full.data$Date.Time <- as.POSIXct(full.data$Date.Time, format="%d.%m.%Y %H:%M:%S")
 full.data$Date <- as.Date(full.data$Date.Time)
 full.data$Hour <- hour(full.data$Date.Time)
@@ -62,9 +60,6 @@ daily.testing.month <- data.daily[2880:2921,5]
 
 test.yday <- yday(daily.testing.date[1])
 
-daily.pressure.ts <- ts(data.daily$pressure, frequency = 365, start=c(2009,1))
-daily.temperature.ts <- ts(data.daily$temperature, frequency = 365, start=c(2009,1))
-daily.humidity.ts <- ts(data.daily$humidity, frequency = 365, start=c(2009,1))
 
 daily.pressure.train.ts <- ts(daily.training.data$pressure, frequency = 365, start=c(2009,1))
 daily.temp.train.ts <- ts(daily.training.data$temperature, frequency = 365, start=c(2009,1))
@@ -77,6 +72,7 @@ daily.humidity.test.ts <- ts(daily.testing.data$humidity, frequency = 365, start
 
 
 ```{r}
+par(mfrow=c(3,1))
 ts.plot(daily.pressure.train.ts, type="l", main=paste("pressure"),ylab="")
 ts.plot(daily.temp.train.ts, type="l", main=paste("temperature"),ylab="")
 ts.plot(daily.humidity.train.ts, type="l", main=paste("humidity"),ylab="")
@@ -86,27 +82,23 @@ ts.plot(daily.humidity.train.ts, type="l", main=paste("humidity"),ylab="")
 stats::acf(as.matrix(daily.training.data[-c(1,5)]))
 ```
 
-## Non-parametric trend and ANOVA monthly seasonality
+## Model each of the time series separetely using Non-parametric trend and ANOVA monthly seasonality
 
 ```{r}
 daily.time.pts <- c(1:length(daily.training.date))
 daily.time.pts <- c(daily.time.pts - min(daily.time.pts))/max(daily.time.pts)
 ```
 
-### Pressure
-
 ```{r}
 gam1.fitted = gam(daily.pressure.train.ts ~ s(daily.time.pts)+factor(daily.training.month))
 summary(gam1.fitted)
 ```
 
-### Temperature
 ```{r}
 gam2.fitted = gam(daily.temp.train.ts ~ s(daily.time.pts)+factor(daily.training.month))
 summary(gam2.fitted)
 ```
 
-### Humidity
 
 ```{r}
 gam3.fitted = gam(daily.humidity.train.ts ~ s(daily.time.pts)+factor(daily.training.month))
@@ -133,7 +125,7 @@ legend(x="topleft", legend=c("Humidity", "Non-parametric trend and monthly seaso
 
 *Response*: Looking at the plots above, we can see that for all 3 time series we were able to capture the main pattern, especially it is visible for temperature and humidity time series that have clear seasonality patterns.
 
-### Residual Analysis
+## Residual Analysis
 
 ```{r}
 par(mfrow=c(2,2))
@@ -173,67 +165,6 @@ kpss.test(gam3.fitted$residuals)
 ```
 *Response*: Looking at the time series plot and ACF plot of Squared residuals we conclude that the variance isn't constant. On the ACF plot we see a seasonal pattern, which indicates non stationarity. However, results of Augmented Dickey-Fuller Test and KPSS both test suggest stationary data. So there is not enough evidence to indicate non stationary data. To conclude, based on time series plot, ACF plot and results of the test for stationarity we conclude that the residuals of the third model are close to stationary, but we cannot say for sure. There's also heteroscedasticity in the residuals.
 
-### Predictions
-
-#### Pressure
-```{r}
-
-prediction.h.gam <- c()
-prediction.p.gam <- c()
-prediction.t.gam <- c()
-
-for (i in 1:6) {
-  data <- daily.training.data
-  new.data <- daily.testing.data[c((1 + (i - 1)*7):(i*7)),]
-  if (i >= 2) {
-    data <- rbind(data, daily.testing.data[c(1:((i - 1)*7)),])
-  }
-  tps <- c(1:nrow(data.daily))
-  tps <- c(tps - min(tps))/max(tps)
-  data$tps <- tps[1:nrow(data)]
-  new.data$tps <- tps[(nrow(data) + 1):(nrow(data) + 7)]
-  
-  gam.p <- gam(pressure ~ s(tps)+factor(month), data = data)
-  predict.p <- predict(gam.p, new.data, se.fit = TRUE)
-  lb <- predict.p$fit - 1.96 * predict.p$se.fit
-  ub <- predict.p$fit + 1.96 * predict.p$se.fit
-  temp <- data.frame('prediction' = predict.p$fit, 'lower' = lb, 'upper' = ub)
-  prediction.p.gam <- rbind(prediction.p.gam,temp)
-  
-  gam.t <- gam(temperature ~ s(tps)+factor(month), data = data)
-  predict.t <- predict(gam.t, new.data, se.fit = TRUE)
-  lb <- predict.t$fit - 1.96 * predict.t$se.fit
-  ub <- predict.t$fit + 1.96 * predict.t$se.fit
-  temp <- data.frame('prediction' = predict.t$fit, 'lower' = lb, 'upper' = ub)
-  prediction.t.gam <- rbind(prediction.t.gam,temp)
-  
-  gam.h <- gam(humidity ~ s(tps)+factor(month), data = data)
-  predict.h <- predict(gam.h, new.data, se.fit = TRUE)
-  lb <- predict.h$fit - 1.96 * predict.h$se.fit
-  ub <- predict.h$fit + 1.96 * predict.h$se.fit
-  temp <- data.frame('prediction' = predict.h$fit, 'lower' = lb, 'upper' = ub)
-  prediction.h.gam <- rbind(prediction.h.gam,temp)
-}
-
-gam.prediction <- data.frame('date' = daily.testing.data$date,
-                             'pressure' = prediction.p.gam,
-                             'temperature' = prediction.t.gam,
-                             'humidity' = prediction.h.gam,
-                             'month' = daily.testing.data$month)
-
-plot(daily.testing.data$date, daily.testing.data$pressure, type = 'l', ylim = c(980,1020), main = 'Pressure Prediction', ylab = 'Pressure', xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.p.gam$prediction, pch = 1, col = 'red', ylim = c(980,1020), ylab = '', cex = 0.8, xlab = 'Date')
-
-plot(daily.testing.data$date, daily.testing.data$temperature, ylim = c(268,285), main = 'Temperature Prediction', ylab = 'Temperature', type = 'l', xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.t.gam$prediction, col = 'red', ylim = c(268,285),ylab = '', pch = 1, cex = 0.8, xlab = 'Date')
-
-plot(daily.testing.data$date, daily.testing.data$humidity, ylim = c(2,6), main = 'Humidity Prediction',ylab = 'Humidity', type = 'l', xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.h.gam$prediction, col = 'red', ylim = c(2,6),ylab = '', pch = 1, cex = 0.8, xlab = 'Date')
-```
-
 
 ## ARMA modeling
 
@@ -241,8 +172,7 @@ plot(daily.testing.data$date, prediction.h.gam$prediction, col = 'red', ylim = c
 ```{r}
 nfit = length(daily.testing.date)
 harmonic.train <- cbind(sin(daily.training.month*2*pi/12),cos(daily.training.month*2*pi/12))
-harmonic.test <- cbind(sin(daily.testing.month*2*pi/12),cos(daily.testing.month*2*pi/12))
-harmonic.all <- rbind(harmonic.train, harmonic.test)
+harmonic.test <- cbind(sin(daily.testing.month*2*pi/12),cos(daily.training.month*2*pi/12))
 ```
 
 ```{r}
@@ -309,6 +239,7 @@ qqline(residuals(arma.pressure))
 #perform shapiro-wilk test
 shapiro.test(residuals(arma.pressure))
 ```
+
 
 ### Temperature
 ```{r}
@@ -422,103 +353,46 @@ For all 3 models we see the similar results:
 2) ACF plot of Squared residuals indicates that the squared residuals are correlated, so we conclude that heteroskedasticity is present in the residuals.
 3) Shapiro-Wilk normality test shows that the residuals are not normally distributed because it rejects the null hypothesis of normal distribution. The QQ plot also shows heavier tails than for normal distribution. We conclude that the residuals does not follow normal distribution, which is required for model fitting using MLE. We conclude that our models aren't the good fit. 
 
-
-
-### Prediction
-```{r, eval = FALSE}
-prediction.p.arima <- data.frame(Inf, Inf, Inf)
-names(prediction.p.arima) <- c('prediction', 'lower', 'upper')
-prediction.t.arima <- data.frame(Inf, Inf, Inf)
-names(prediction.t.arima) <- c('prediction', 'lower', 'upper')
-prediction.h.arima <- data.frame(Inf, Inf, Inf)
-names(prediction.h.arima) <- c('prediction', 'lower', 'upper')
-
-for (i in 1:6) {
-  data <- daily.training.data
-  new.xreg <- harmonic.test[(1 + (i - 1)*7): (i*7),]
-  if (i >= 2) {
-    data <- rbind(data, daily.testing.data[c(1:((i - 1)*7)),])
-  }
-
-  arma.p <- Arima(data$pressure,order=c(4,1,6), 
-                  xreg=as.matrix(harmonic.all[1:nrow(data),]))
-  arma.pred.p <- predict(arma.p, n.ahead = 7, newxreg = as.matrix(new.xreg))
-  
-  lb <- arma.pred.p$pred - 1.96 * arma.pred.p$se
-  ub <- arma.pred.p$pred + 1.96 * arma.pred.p$se
-  temp <- data.frame('prediction' = arma.pred.p$pred, 'lower' = lb, 'upper' = ub)
-  prediction.p.arima <- rbind(prediction.p.arima, temp)
-  
-  arma.t <- Arima(data$temperature,order=c(8,1,4), 
-                  xreg=as.matrix(harmonic.all[1:nrow(data),]))
-  arma.pred.t <- predict(arma.t, n.ahead = 7, newxreg = as.matrix(new.xreg))
-  
-  lb <- arma.pred.t$pred - 1.96 * arma.pred.t$se
-  ub <- arma.pred.t$pred + 1.96 * arma.pred.t$se
-  temp <- data.frame('prediction' = arma.pred.t$pred, 'lower' = lb, 'upper' = ub)
-  prediction.t.arima <- rbind(prediction.t.arima, temp)
-  
-  arma.h <- Arima(data$humidity,order=c(5,0,1), 
-                  xreg=as.matrix(harmonic.all[1:nrow(data),]))
-  arma.pred.h <- predict(arma.h, n.ahead = 7, newxreg = as.matrix(new.xreg))
-  
-  lb <- arma.pred.h$pred - 1.96 * arma.pred.h$se
-  ub <- arma.pred.h$pred + 1.96 * arma.pred.h$se
-  temp <- data.frame('prediction' = arma.pred.h$pred, 'lower' = lb, 'upper' = ub)
-  prediction.h.arima <- rbind(prediction.h.arima, temp)
-}
-prediction.p.arima <- prediction.p.arima[-1,]
-prediction.p.arima$date <- daily.testing.data$date
-
-prediction.t.arima <- prediction.t.arima[-1,]
-prediction.t.arima$date <- daily.testing.data$date
-
-prediction.h.arima <- prediction.h.arima[-1,]
-prediction.h.arima$date <- daily.testing.data$date
-
-armax.prediction <- list(prediction.p.arima, prediction.t.arima, prediction.h.arima)
-save(armax.prediction, file = 'armax-prediction.RData')
-```
-
-### Prediction Plots
 ```{r}
-
-load('armax-prediction.RData')
-prediction.p.armax <- armax.prediction[[1]]
-prediction.t.armax <- armax.prediction[[2]]
-prediction.h.armax <- armax.prediction[[3]]
-
-
-plot(daily.testing.data$date, daily.testing.data$pressure, type = 'l', ylim = c(970,1020), main = 'Pressure Prediction', ylab = 'Pressure', xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.p.armax$prediction, type = 'l', col = 'red', ylim = c(970,1020), ylab = '', lwd = 1.5, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.p.armax$lower, type = 'l', col = 'blue', ylim = c(970,1020), ylab = '', lwd = 1.5, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.p.armax$upper, type = 'l', col = 'blue', ylim = c(970,1020), ylab = '', lwd = 1.5, xlab = 'Date')
-
-plot(daily.testing.data$date, daily.testing.data$temperature, type = 'l', ylim = c(264,289), main = 'Temperature Prediction', ylab = 'Temperature', xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.t.armax$prediction, type = 'l', col = 'red', ylim = c(264,289), ylab = '', lwd = 1.5, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.t.armax$lower, type = 'l', col = 'blue', ylim = c(264,289), ylab = '', lwd = 1.5, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.t.armax$upper, type = 'l', col = 'blue', ylim = c(264,289), ylab = '', lwd = 1.5, xlab = 'Date')
-
-plot(daily.testing.data$date, daily.testing.data$humidity, type = 'l', ylim = c(0.5,8), main = 'Humidity Prediction', ylab = 'Humidity', xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.h.armax$prediction, type = 'l', col = 'red', ylim = c(0.5,8), ylab = '', lwd = 1.5, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.h.armax$lower, type = 'l', col = 'blue', ylim = c(0.5,8), ylab = '', lwd = 1.5, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.h.armax$upper, type = 'l', col = 'blue', ylim = c(0.5,8), ylab = '', lwd = 1.5, xlab = 'Date')
-
-
+pressure.arma.fitted.ts = ts(fitted(arma.pressure), freq = 365, start = c(2009,1))
+plot(daily.pressure.train.ts,ylab="Pressure", col="black")
+lines(pressure.arma.fitted.ts, lwd=1.5,col="skyblue")
+legend(x="topleft", legend=c("Pressure", "ARMA(4,1,6)"), fill = c("black", "skyblue"), cex=0.7, lty=1)
+```
+```{r}
+coefs <- coef(arma.pressure)
+roots.daily = polyroot(c(1, -coefs[1:4]))
+abs(roots.daily)
 ```
 
+```{r}
+temp.arma.fitted.ts = ts(fitted(arma.temp), freq = 365, start = c(2009,1))
+plot(daily.temp.train.ts,ylab="Temperature", col="black")
+lines(temp.arma.fitted.ts, lwd=1.5,col="lightgreen")
+legend(x="topleft", legend=c("Temperature", "ARMA(8,1,4)"), fill = c("black", "lightgreen"), cex=0.7, lty=1)
+```
+
+```{r}
+coefs <- coef(arma.temp)
+roots.daily = polyroot(c(1, -coefs[1:8]))
+abs(roots.daily)
+```
+
+```{r}
+humidity.arma.fitted.ts = ts(fitted(arma.humidity), freq = 365, start = c(2009,1))
+plot(daily.humidity.train.ts,ylab="Humidity", col="black")
+lines(humidity.arma.fitted.ts, lwd=1.5,col="orange")
+legend(x="topleft", legend=c("Humidity", "ARMA(5,0,1)"), fill = c("black", "orange"), cex=0.7, lty=1)
+```
+
+```{r}
+coefs <- coef(arma.humidity)
+roots.daily = polyroot(c(1, -coefs[1:5]))
+abs(roots.daily)
+```
 
 ## ARMA-GARCH for modeling pressure
-```{r, eval = FALSE}
+```{r}
 # We take order of ARMA equal to (4,1,6)
 # Find order for GARCH
 test_modelAGG <- function(m,n){
@@ -536,21 +410,21 @@ test_modelAGG <- function(m,n){
 ordersAGG = data.frame(Inf,Inf,Inf)
 names(ordersAGG) <- c("m","n","AIC")
 
-for (m in 0:2){
-    for (n in 0:2){
-        possibleError <- tryCatch(
-            ordersAGG<-rbind(ordersAGG,test_modelAGG(m,n)),
-            error=function(e) e
-        )
-        if(inherits(possibleError, "error")) next
-    }
-}
-ordersAGG <- ordersAGG[order(-ordersAGG$AIC),]
-tail(ordersAGG)
+#for (m in 0:2){
+#    for (n in 0:2){
+#        possibleError <- tryCatch(
+#            ordersAGG<-rbind(ordersAGG,test_modelAGG(m,n)),
+#            error=function(e) e
+#        )
+#        if(inherits(possibleError, "error")) next
+#    }
+#}
+#ordersAGG <- ordersAGG[order(-ordersAGG$AIC),]
+#tail(ordersAGG)
 ```
 
 
-```{r, eval = FALSE}
+```{r}
 # Update ARMA using GARCH = (2,2)
 test_modelAGA <- function(p,q){
     spec = ugarchspec(variance.model=list(garchOrder=c(1,1)),
@@ -565,18 +439,18 @@ test_modelAGA <- function(p,q){
     return(df)
 }
 
-ordersAGA = data.frame(Inf,Inf,Inf)
-names(ordersAGA) <- c("p","q","AIC")
-for (p in 0:7){
-    for (q in 0:7){1
-              ordersAGA<-rbind(ordersAGA,test_modelAGA(p,q))
-    }
-}
-ordersAGA <- ordersAGA[order(-ordersAGA$AIC),]
-tail(ordersAGA)
+#ordersAGA = data.frame(Inf,Inf,Inf)
+#names(ordersAGA) <- c("p","q","AIC")
+#for (p in 0:7){
+#    for (q in 0:7){1
+#              ordersAGA<-rbind(ordersAGA,test_modelAGA(p,q))
+#    }
+#}
+#ordersAGA <- ordersAGA[order(-ordersAGA$AIC),]
+#tail(ordersAGA)
 ```
 
-```{r, eval = FALSE}
+```{r}
 # Update order for GARCH using ARMA (6,5s)
 test_modelAGG <- function(m,n){
     spec = ugarchspec(variance.model=list(garchOrder=c(m,n)),
@@ -593,20 +467,20 @@ test_modelAGG <- function(m,n){
 ordersAGG = data.frame(Inf,Inf,Inf)
 names(ordersAGG) <- c("m","n","AIC")
 
-for (m in 0:2){
-    for (n in 0:2){
-        possibleError <- tryCatch(
-            ordersAGG<-rbind(ordersAGG,test_modelAGG(m,n)),
-            error=function(e) e
-        )
-        if(inherits(possibleError, "error")) next
-    }
-}
-ordersAGG <- ordersAGG[order(-ordersAGG$AIC),]
-tail(ordersAGG)
+#for (m in 0:2){
+#    for (n in 0:2){
+#        possibleError <- tryCatch(
+#            ordersAGG<-rbind(ordersAGG,test_modelAGG(m,n)),
+#            error=function(e) e
+#        )
+#        if(inherits(possibleError, "error")) next
+#    }
+#}
+#ordersAGG <- ordersAGG[order(-ordersAGG$AIC),]
+#tail(ordersAGG)
 ```
 
-The final iteration shows that the optimal orders for modeling the temperature are (6,5)x(1,1).
+The final iteration shows that the optimal orders for modeling pressure are (6,5)x(1,1).
 
 ```{r}
 spec.1 = ugarchspec(variance.model=list(garchOrder=c(1,1)),
@@ -618,16 +492,34 @@ pressure.arma.garch
 ```
 
 ```{r}
+pressure.arma.garch.fitted.ts = ts(fitted(pressure.arma.garch), freq = 365, start = c(2009,1))
+plot(daily.pressure.train.ts,ylab="Pressure", col="black")
+lines(pressure.arma.garch.fitted.ts, lwd=1.5,col="olivedrab3")
+legend(x="topleft", legend=c("Pressure", "ARMA-GARCH"), fill = c("black", "olivedrab3"), cex=0.7, lty=1)
+
+ts.plot(ts(sigma(pressure.arma.garch), freq = 365, start=c(2009,1)), ylab="Volatility", col="olivedrab")
+```
+
+```{r}
+pressure.arma.garch.resid = pressure.arma.garch@fit$z
 par(mfrow=c(2,2))
 ts.plot(ts(residuals(pressure.arma.garch), frequency = 365, start = c(2009,1)))
 acf(residuals(pressure.arma.garch), lag.max = 40)
 acf(residuals(pressure.arma.garch)^2, lag.max = 40)
-qqnorm(residuals(pressure.arma.garch))
-qqline(residuals(pressure.arma.garch))
+
+par(mfrow=c(2,2))
+ts.plot(ts(pressure.arma.garch.resid, frequency = 365, start = c(2009,1)))
+acf(pressure.arma.garch.resid, lag.max = 40)
+acf(pressure.arma.garch.resid^2, lag.max = 40)
+```
+
+```{r}
+library(car)
+qqPlot(pressure.arma.garch.resid, dist = "t", df=13, main="Standardized Residuals")
 ```
 
 ## ARMA-GARCH for modeling temperature
-```{r, eval = FALSE}
+```{r}
 # We take order of ARMA equal to (8,1,4)
 # Find order for GARCH
 test_modelAGG <- function(m,n){
@@ -645,20 +537,20 @@ test_modelAGG <- function(m,n){
 ordersAGG = data.frame(Inf,Inf,Inf)
 names(ordersAGG) <- c("m","n","AIC")
 
-for (m in 0:2){
-    for (n in 0:2){
-        possibleError <- tryCatch(
-            ordersAGG<-rbind(ordersAGG,test_modelAGG(m,n)),
-            error=function(e) e
-        )
-        if(inherits(possibleError, "error")) next
-    }
-}
-ordersAGG <- ordersAGG[order(-ordersAGG$AIC),]
-tail(ordersAGG)
+#for (m in 0:2){
+#    for (n in 0:2){
+#        possibleError <- tryCatch(
+#            ordersAGG<-rbind(ordersAGG,test_modelAGG(m,n)),
+#            error=function(e) e
+#        )
+#        if(inherits(possibleError, "error")) next
+#    }
+#}
+#ordersAGG <- ordersAGG[order(-ordersAGG$AIC),]
+#tail(ordersAGG)
 ```
 
-```{r, eval = FALSE}
+```{r}
 # Update ARMA using GARCH = (2,0)
 test_modelAGA <- function(p,q){
     spec = ugarchspec(variance.model=list(garchOrder=c(2,0)),
@@ -675,20 +567,20 @@ test_modelAGA <- function(p,q){
 
 ordersAGA = data.frame(Inf,Inf,Inf)
 names(ordersAGA) <- c("p","q","AIC")
-for (p in 0:7){
-    for (q in 0:7){
-        possibleError <- tryCatch(
-            ordersAGA<-rbind(ordersAGA,test_modelAGA(p,q)),
-            error=function(e) e
-        )
-        if(inherits(possibleError, "error")) next
-    }
-}
-ordersAGA <- ordersAGA[order(-ordersAGA$AIC),]
-tail(ordersAGA)
+#for (p in 0:7){
+#    for (q in 0:7){
+#        possibleError <- tryCatch(
+#            ordersAGA<-rbind(ordersAGA,test_modelAGA(p,q)),
+#            error=function(e) e
+#        )
+#        if(inherits(possibleError, "error")) next
+#    }
+#}
+#ordersAGA <- ordersAGA[order(-ordersAGA$AIC),]
+#tail(ordersAGA)
 ```
 
-```{r, eval = FALSE}
+```{r}
 # We take order of ARMA equal to (6,5)
 # Find order for GARCH
 test_modelAGG <- function(m,n){
@@ -706,20 +598,20 @@ test_modelAGG <- function(m,n){
 ordersAGG = data.frame(Inf,Inf,Inf)
 names(ordersAGG) <- c("m","n","AIC")
 
-for (m in 0:2){
-    for (n in 0:2){
-        possibleError <- tryCatch(
-            ordersAGG<-rbind(ordersAGG,test_modelAGG(m,n)),
-            error=function(e) e
-        )
-        if(inherits(possibleError, "error")) next
-    }
-}
-ordersAGG <- ordersAGG[order(-ordersAGG$AIC),]
-tail(ordersAGG)
+#for (m in 0:2){
+#    for (n in 0:2){
+#        possibleError <- tryCatch(
+#            ordersAGG<-rbind(ordersAGG,test_modelAGG(m,n)),
+#            error=function(e) e
+#        )
+#        if(inherits(possibleError, "error")) next
+#    }
+#}
+#ordersAGG <- ordersAGG[order(-ordersAGG$AIC),]
+#tail(ordersAGG)
 ```
 
-```{r, eval = FALSE}
+```{r}
 # Update ARMA using GARCH = (1,1)
 test_modelAGA <- function(p,q){
     spec = ugarchspec(variance.model=list(garchOrder=c(1,1)),
@@ -736,17 +628,17 @@ test_modelAGA <- function(p,q){
 
 ordersAGA = data.frame(Inf,Inf,Inf)
 names(ordersAGA) <- c("p","q","AIC")
-for (p in 0:7){
-    for (q in 0:7){
-        possibleError <- tryCatch(
-            ordersAGA<-rbind(ordersAGA,test_modelAGA(p,q)),
-            error=function(e) e
-        )
-        if(inherits(possibleError, "error")) next
-    }
-}
-ordersAGA <- ordersAGA[order(-ordersAGA$AIC),]
-tail(ordersAGA)
+#for (p in 0:7){
+#    for (q in 0:7){
+#        possibleError <- tryCatch(
+#            ordersAGA<-rbind(ordersAGA,test_modelAGA(p,q)),
+#            error=function(e) e
+#        )
+#        if(inherits(possibleError, "error")) next
+#    }
+#}
+#ordersAGA <- ordersAGA[order(-ordersAGA$AIC),]
+#tail(ordersAGA)
 ```
 
 The final iteration shows that the optimal orders for modeling the temperature are (6,5)x(1,1).
@@ -760,20 +652,36 @@ temp.arma.garch<-ugarchfit(spec.2,daily.temp.train.ts,solver='hybrid')
 temp.arma.garch
 ```
 
+```{r}
+temp.arma.garch.fitted.ts = ts(fitted(temp.arma.garch), freq = 365, start = c(2009,1))
+plot(daily.temp.train.ts,ylab="Temperature", col="black")
+lines(temp.arma.garch.fitted.ts, lwd=1.5,col="royalblue")
+legend(x="topleft", legend=c("Temperature", "ARMA-GARCH"), fill = c("black", "royalblue"), cex=0.7, lty=1)
+
+ts.plot(ts(sigma(temp.arma.garch), freq = 365, start=c(2009,1)), ylab="Volatility", col="royalblue4")
+```
+
 
 ```{r}
+temp.arma.garch.resid = pressure.arma.garch@fit$z
 par(mfrow=c(2,2))
 ts.plot(ts(residuals(temp.arma.garch), frequency = 365, start = c(2009,1)))
 acf(residuals(temp.arma.garch), lag.max = 40)
 acf(residuals(temp.arma.garch)^2, lag.max = 40)
-qqnorm(residuals(temp.arma.garch))
-qqline(residuals(temp.arma.garch))
+
+par(mfrow=c(2,2))
+ts.plot(ts(temp.arma.garch.resid, frequency = 365, start = c(2009,1)))
+acf(temp.arma.garch.resid, lag.max = 40)
+acf(temp.arma.garch.resid^2, lag.max = 40)
 ```
 
-
+```{r}
+library(car)
+qqPlot(temp.arma.garch.resid, dist = "t", df=21, main="Standardized Residuals")
+```
 
 ## ARMA-GARCH for modeling humidity
-```{r, eval = FALSE}
+```{r}
 # We take order of ARMA equal to (6,0,5)
 # Find order for GARCH
 test_modelAGG <- function(m,n){
@@ -791,20 +699,20 @@ test_modelAGG <- function(m,n){
 ordersAGG = data.frame(Inf,Inf,Inf)
 names(ordersAGG) <- c("m","n","AIC")
 
-for (m in 0:2){
-    for (n in 0:2){
-        possibleError <- tryCatch(
-            ordersAGG<-rbind(ordersAGG,test_modelAGG(m,n)),
-            error=function(e) e
-        )
-        if(inherits(possibleError, "error")) next
-    }
-}
-ordersAGG <- ordersAGG[order(-ordersAGG$AIC),]
-tail(ordersAGG)
+#for (m in 0:2){
+#    for (n in 0:2){
+#        possibleError <- tryCatch(
+#            ordersAGG<-rbind(ordersAGG,test_modelAGG(m,n)),
+#            error=function(e) e
+#        )
+#        if(inherits(possibleError, "error")) next
+#    }
+#}
+#ordersAGG <- ordersAGG[order(-ordersAGG$AIC),]
+#tail(ordersAGG)
 ```
 
-```{r, eval = FALSE}
+```{r}
 # Update ARMA using GARCH = (2,2)
 test_modelAGA <- function(p,q){
     spec = ugarchspec(variance.model=list(garchOrder=c(2,2)),
@@ -821,20 +729,20 @@ test_modelAGA <- function(p,q){
 
 ordersAGA = data.frame(Inf,Inf,Inf)
 names(ordersAGA) <- c("p","q","AIC")
-for (p in 0:7){
-    for (q in 0:7){
-        possibleError <- tryCatch(
-            ordersAGA<-rbind(ordersAGA,test_modelAGA(p,q)),
-            error=function(e) e
-        )
-        if(inherits(possibleError, "error")) next
-    }
-}
-ordersAGA <- ordersAGA[order(-ordersAGA$AIC),]
-tail(ordersAGA)
+#for (p in 0:7){
+#    for (q in 0:7){
+#        possibleError <- tryCatch(
+#            ordersAGA<-rbind(ordersAGA,test_modelAGA(p,q)),
+#            error=function(e) e
+#        )
+#        if(inherits(possibleError, "error")) next
+#    }
+#}
+#ordersAGA <- ordersAGA[order(-ordersAGA$AIC),]
+#tail(ordersAGA)
 ```
 
-```{r, eval = FALSE}
+```{r}
 # Update order for GARCH using ARMA (4,4)
 test_modelAGG <- function(m,n){
     spec = ugarchspec(variance.model=list(garchOrder=c(m,n)),
@@ -851,150 +759,61 @@ test_modelAGG <- function(m,n){
 ordersAGG = data.frame(Inf,Inf,Inf)
 names(ordersAGG) <- c("m","n","AIC")
 
-for (m in 0:2){
-    for (n in 0:2){
-        possibleError <- tryCatch(
-            ordersAGG<-rbind(ordersAGG,test_modelAGG(m,n)),
-            error=function(e) e
-        )
-        if(inherits(possibleError, "error")) next
-    }
-}
-ordersAGG <- ordersAGG[order(-ordersAGG$AIC),]
-tail(ordersAGG)
+#for (m in 0:2){
+#    for (n in 0:2){
+#        possibleError <- tryCatch(
+#            ordersAGG<-rbind(ordersAGG,test_modelAGG(m,n)),
+#            error=function(e) e
+#        )
+#        if(inherits(possibleError, "error")) next
+#    }
+#}
+#ordersAGG <- ordersAGG[order(-ordersAGG$AIC),]
+#tail(ordersAGG)
 ```
 
-The final iteration shows that the optimal orders for modeling the Humidity are (4,4)x(2,2).
+The final iteration shows that the optimal orders for modeling the humidity are (4,4)x(2,2).
 
 ```{r}
-spec.3 = ugarchspec(variance.model=list(garchOrder=c(2,2)), 
-                    mean.model=list(armaOrder=c(4,4), 
-                                    external.regressors = as.matrix(harmonic.train),
-                                    include.mean=T), 
-                    distribution.model="std")
+spec.3 = ugarchspec(variance.model=list(garchOrder=c(2,2)),
+                 mean.model=list(armaOrder=c(4,4),
+                                 external.regressors = as.matrix(harmonic.train),
+                                  include.mean=T), distribution.model="std")
 hum.arma.garch<-ugarchfit(spec.3,daily.humidity.train.ts,solver='hybrid')
 hum.arma.garch
 ```
 
 ```{r}
+hum.arma.garch.fitted.ts = ts(fitted(hum.arma.garch), freq = 365, start = c(2009,1))
+plot(daily.humidity.train.ts,ylab="Humidity", col="black")
+lines(hum.arma.garch.fitted.ts, lwd=1.5,col="sienna1")
+legend(x="topleft", legend=c("Humidity", "ARMA-GARCH"), fill = c("black", "sienna1"), cex=0.7, lty=1)
+
+ts.plot(ts(sigma(temp.arma.garch), freq = 365, start=c(2009,1)), ylab="Volatility", col="sienna3")
+```
+
+```{r}
+hum.arma.garch.resid = pressure.arma.garch@fit$z
 par(mfrow=c(2,2))
 ts.plot(ts(residuals(hum.arma.garch), frequency = 365, start = c(2009,1)))
 acf(residuals(hum.arma.garch), lag.max = 40)
 acf(residuals(hum.arma.garch)^2, lag.max = 40)
-qqnorm(residuals(hum.arma.garch))
-qqline(residuals(hum.arma.garch))
+
+par(mfrow=c(2,2))
+ts.plot(ts(hum.arma.garch.resid, frequency = 365, start = c(2009,1)))
+acf(hum.arma.garch.resid, lag.max = 40)
+acf(hum.arma.garch.resid^2, lag.max = 40)
 ```
 
-
-## Arma-Garch Prediction
-```{r, eval = FALSE}
-prediction.p.arma.garch <- data.frame(Inf, Inf, Inf)
-names(prediction.p.arma.garch) <- c('prediction', 'lower', 'upper')
-prediction.t.arma.garch <- data.frame(Inf, Inf, Inf)
-names(prediction.t.arma.garch) <- c('prediction', 'lower', 'upper')
-prediction.h.arma.garch <- data.frame(Inf, Inf, Inf)
-names(prediction.h.arma.garch) <- c('prediction', 'lower', 'upper')
-
-for (i in 1:6) {
-  data <- daily.training.data
-  if (i >= 2) {
-    data <- rbind(data, daily.testing.data[c(1:((i - 1)*7)),])
-  }
-  
-  spec.p = ugarchspec(variance.model=list(garchOrder=c(1,1)), 
-                      mean.model=list(armaOrder=c(6,5), 
-                                      external.regressors = as.matrix(harmonic.all[c(1:nrow(data)),]),
-                                      include.mean=T), 
-                      distribution.model="std")
-  arma.garch.p <-ugarchfit(spec.p, data$pressure,solver='hybrid')
-  fore <- ugarchforecast(arma.garch.p, n.ahead = 7)
-  fore <- fore@forecast
-  temp <- data.frame(fore$seriesFor, 
-                     fore$seriesFor - 1.96 * fore$sigmaFor, 
-                     fore$seriesFor + 1.96 * fore$sigmaFor)
-  names(temp) <- c('prediction', 'lower', 'upper')
-  prediction.p.arma.garch <- rbind(prediction.p.arma.garch, temp)
-  
-  
-  spec.t = ugarchspec(variance.model=list(garchOrder=c(1,1)), 
-                      mean.model=list(armaOrder=c(6,5), 
-                                      external.regressors = as.matrix(harmonic.all[c(1:nrow(data)),]),
-                                      include.mean=T), 
-                      distribution.model="std")
-  arma.garch.t <-ugarchfit(spec.t, data$temperature,solver='hybrid')
-  fore <- ugarchforecast(arma.garch.t, n.ahead = 7)
-  fore <- fore@forecast
-  temp <- data.frame('prediction' = fore$seriesFor, 
-                     'lower' = fore$seriesFor - 1.96 * fore$sigmaFor, 
-                     'upper' = fore$seriesFor + 1.96 * fore$sigmaFor)
-  names(temp) <- c('prediction', 'lower', 'upper')
-  prediction.t.arma.garch <- rbind(prediction.t.arma.garch, temp)
-  
-  spec.h = ugarchspec(variance.model=list(garchOrder=c(2,2)), 
-                      mean.model=list(armaOrder=c(4,4), 
-                                      external.regressors = as.matrix(harmonic.all[c(1:nrow(data)),]),
-                                      include.mean=T), 
-                      distribution.model="std")
-  arma.garch.h <-ugarchfit(spec.h, data$humidity,solver='hybrid')
-  fore <- ugarchforecast(arma.garch.h, n.ahead = 7)
-  fore <- fore@forecast
-  temp <- data.frame('prediction' = fore$seriesFor, 
-                     'lower' = fore$seriesFor - 1.96 * fore$sigmaFor, 
-                     'upper' = fore$seriesFor + 1.96 * fore$sigmaFor)
-  names(temp) <- c('prediction', 'lower', 'upper')
-  prediction.h.arma.garch <- rbind(prediction.h.arma.garch, temp)
-  
-}
-prediction.p.arma.garch <- prediction.p.arma.garch[-1,]
-prediction.p.arma.garch$date <- daily.testing.data$date
-
-prediction.t.arma.garch <- prediction.t.arma.garch[-1,]
-prediction.t.arma.garch$date <- daily.testing.data$date
-
-prediction.h.arma.garch <- prediction.h.arma.garch[-1,]
-prediction.h.arma.garch$date <- daily.testing.data$date
-
-arma.garch.prediction <- list(prediction.p.arma.garch, prediction.t.arma.garch, prediction.h.arma.garch)
-save(arma.garch.prediction, file = 'arma-garch-prediction.RData')
-```
-
-
-### Prediction Plots
 ```{r}
-load('arma-garch-prediction.RData')
-prediction.p.arma.garch <- arma.garch.prediction[[1]]
-prediction.t.arma.garch <- arma.garch.prediction[[2]]
-prediction.h.arma.garch <- arma.garch.prediction[[3]]
-
-plot(daily.testing.data$date, daily.testing.data$pressure, type = 'l', ylim = c(970,1020), main = 'Pressure Prediction', ylab = 'Pressure', xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.p.arma.garch$prediction, type = 'l', col = 'red', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.p.arma.garch$lower, type = 'l', col = 'blue', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.p.arma.garch$upper, type = 'l', col = 'blue', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
-
-plot(daily.testing.data$date, daily.testing.data$temperature, type = 'l', ylim = c(264,289), main = 'Temperature Prediction', ylab = 'Temperature', xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.t.arma.garch$prediction, type = 'l', col = 'red', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.t.arma.garch$lower, type = 'l', col = 'blue', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.t.arma.garch$upper, type = 'l', col = 'blue', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
-
-plot(daily.testing.data$date, daily.testing.data$humidity, type = 'l', ylim = c(0.5,8), main = 'Humidity Prediction', ylab = 'Humidity', xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.h.arma.garch$prediction, type = 'l', col = 'red', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.h.arma.garch$lower, type = 'l', col = 'blue', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.h.arma.garch$upper, type = 'l', col = 'blue', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
+library(car)
+qqPlot(hum.arma.garch.resid, dist = "t", df=9, main="Standardized Residuals")
 ```
+
 # VAR modeling
 
 ```{r}
 train.data <- cbind(daily.pressure.train.ts, daily.temp.train.ts, daily.humidity.train.ts)
-test.data <- cbind(daily.pressure.test.ts, daily.temp.test.ts, daily.humidity.test.ts)
 colnames(train.data) <- c("pressure", "temperature", "humidity")
 var.select<-VARselect(train.data, exogen=harmonic.train, type="both")
 var.select$selection
@@ -1004,76 +823,6 @@ var.select$selection
 var1<-VAR(train.data,p=3, exogen=harmonic.train, type="both")
 summary(var1)
 ```
-
-```{r, eval=FALSE}
-prediction.p.var <- data.frame(Inf, Inf, Inf)
-names(prediction.p.var) <- c('fcst', 'lower', 'upper')
-prediction.t.var <- data.frame(Inf, Inf, Inf)
-names(prediction.t.var) <- c('fcst', 'lower', 'upper')
-prediction.h.var <- data.frame(Inf, Inf, Inf)
-names(prediction.h.var) <- c('fcst', 'lower', 'upper')
-
-for (i in 1:6) {
-  data <- train.data
-  if (i >= 2) {
-    data <- rbind(data, test.data[c(1:((i - 1)*7)),])
-  }
-  exo <- harmonic.all[1:nrow(data),]
-  new.exo <- harmonic.test[(1 + (i - 1) * 7):(i * 7),]
-  
-  varx<-VAR(data,p=3, exogen=exo, type="both")
-  pred <- predict(varx, n.ahead = 7, ci = 0.95, dumvar = new.exo)
-  pred <- pred$fcst
-  prediction.p.var <- rbind(prediction.p.var, pred$pressure[,1:3])
-  prediction.t.var <- rbind(prediction.t.var, pred$temperature[,1:3])
-  prediction.h.var <- rbind(prediction.h.var, pred$humidity[,1:3])
-}
-
-prediction.p.var <- prediction.p.var[-1,]
-prediction.p.var$date <- daily.testing.data$date
-
-prediction.t.var <- prediction.t.var[-1,]
-prediction.t.var$date <- daily.testing.data$date
-
-prediction.h.var <- prediction.h.var[-1,]
-prediction.h.var$date <- daily.testing.data$date
-
-varx.prediction <- list(prediction.p.var, prediction.t.var, prediction.h.var)
-save(varx.prediction, file = 'varx-prediction.RData')
-```
-
-### Prediction Plots
-```{r}
-load('varx-prediction.RData')
-prediction.p.varx <- varx.prediction[[1]]
-prediction.t.varx <- varx.prediction[[2]]
-prediction.h.varx <- varx.prediction[[3]]
-
-plot(daily.testing.data$date, daily.testing.data$pressure, type = 'l', ylim = c(970,1020), main = 'Pressure Prediction', ylab = 'Pressure', xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.p.varx$fcst, type = 'l', col = 'red', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.p.varx$lower, type = 'l', col = 'blue', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.p.varx$upper, type = 'l', col = 'blue', ylim = c(970,1020), ylab = '', cex = 0.6, xlab = 'Date')
-
-plot(daily.testing.data$date, daily.testing.data$temperature, type = 'l', ylim = c(264,289), main = 'Temperature Prediction', ylab = 'Temperature', xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.t.varx$fcst, type = 'l', col = 'red', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.t.varx$lower, type = 'l', col = 'blue', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.t.varx$upper, type = 'l', col = 'blue', ylim = c(264,289), ylab = '', cex = 0.6, xlab = 'Date')
-
-plot(daily.testing.data$date, daily.testing.data$humidity, type = 'l', ylim = c(0.5,8), main = 'Humidity Prediction', ylab = 'Humidity', xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.h.varx$fcst, type = 'l', col = 'red', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.h.varx$lower, type = 'l', col = 'blue', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
-par(new = T)
-plot(daily.testing.data$date, prediction.h.varx$upper, type = 'l', col = 'blue', ylim = c(0.5,8), ylab = '', cex = 0.6, xlab = 'Date')
-```
-
 *Results*
 Looking at the roots of the characteristic polynomial, we see that their absolute values are less than 1, which indicates that our VAR model is stable.
 
@@ -1089,113 +838,14 @@ Looking at the  output of the models for all 3 weather components we conclude th
 var.restrict.model=restrict(var1)  
 summary(var.restrict.model)
 ```
-
 # Forecasting comparison
+
 ```{r}
-col = wes_palette(n = 5, name = 'FantasticFox1')
-col <- col[-4]
-daily.testing.data$date <- as.POSIXct(daily.testing.data$date)
-point_size = 1.5
-line_width = 2
-
-# Plot with custom x-axis labels
-plot(daily.testing.data$date, daily.testing.data$pressure, type = 'l', ylim = c(960,1020), main = 'Pressure Prediction', ylab = 'Pressure', xlab = 'Date', xaxt = 'n')
-axis(1, at = seq(from = min(daily.testing.data$date, na.rm = TRUE), to = max(daily.testing.data$date, na.rm = TRUE), by = "1 month"), labels = format(seq(from = min(daily.testing.data$date, na.rm = TRUE), to = max(daily.testing.data$date, na.rm = TRUE), by = "1 month"), "%Y-%m-%d"))
-points(daily.testing.data$date, gam.prediction$pressure, col = col[1], cex = point_size)
-lines(daily.testing.data$date, prediction.p.gam$lower, col = col[1], lwd = line_width)
-lines(daily.testing.data$date, prediction.p.gam$upper, col = col[1], lwd = line_width)
-points(daily.testing.data$date, arma.garch.prediction[[1]]$prediction, col = col[2], cex = point_size)
-lines(daily.testing.data$date, prediction.p.arma.garch$lower, col = col[2], lwd = line_width)
-lines(daily.testing.data$date, prediction.p.arma.garch$upper, col = col[2], lwd = line_width)
-points(daily.testing.data$date, varx.prediction[[1]]$fcst, col = col[3], cex = point_size)
-lines(daily.testing.data$date, prediction.p.varx$lower, col = col[3], lwd = line_width)
-lines(daily.testing.data$date, prediction.p.varx$upper, col = col[3], lwd = line_width)
-points(daily.testing.data$date, armax.prediction[[1]]$prediction, col = col[4], cex = point_size)
-lines(daily.testing.data$date, prediction.p.armax$lower, col = col[4], lwd = line_width)
-lines(daily.testing.data$date, prediction.p.armax$upper, col = col[4], lwd = line_width)
-legend('bottomleft', legend = c('observation', 'Nonpar.Trend+ANOVA S.', 
-                                 'ARMA-GARCH', 'VARX', 'ARMAX'), col = c('black', col), lty = 1)
-
-daily.testing.data$date <- as.POSIXct(daily.testing.data$date)
-plot(daily.testing.data$date, daily.testing.data$temperature, type = 'l', ylim = c(260,289), main = 'Temperature Prediction', ylab = 'Temperature', xlab = 'Date', xaxt = 'n')
-axis(1, at = seq(from = min(daily.testing.data$date, na.rm = TRUE), 
-                 to = max(daily.testing.data$date, na.rm = TRUE), 
-                 by = "1 month"), 
-    labels = format(seq(from = min(daily.testing.data$date, na.rm = TRUE),
-                        to = max(daily.testing.data$date, na.rm = TRUE),
-                        by = "1 month"), "%Y-%m-%d"))
-points(daily.testing.data$date, gam.prediction$temperature, col = col[1], cex = point_size, xlab = 'Date')
-lines(daily.testing.data$date, prediction.t.gam$lower, col = col[1], lwd = line_width)
-lines(daily.testing.data$date, prediction.t.gam$upper, col = col[1], lwd = line_width)
-points(daily.testing.data$date, arma.garch.prediction[[2]]$prediction, col = col[2], cex = point_size, xlab = 'Date')
-lines(daily.testing.data$date, prediction.t.arma.garch$lower, col = col[2], lwd = line_width)
-lines(daily.testing.data$date, prediction.t.arma.garch$upper, col = col[2], lwd = line_width)
-points(daily.testing.data$date, varx.prediction[[2]]$fcst, col = col[3], cex = point_size, xlab = 'Date')
-lines(daily.testing.data$date, prediction.t.varx$lower, col = col[3], lwd = line_width)
-lines(daily.testing.data$date, prediction.t.varx$upper, col = col[3], lwd = line_width)
-points(daily.testing.data$date, armax.prediction[[2]]$prediction, col = col[4], cex = point_size, xlab = 'Date')
-lines(daily.testing.data$date, prediction.t.armax$lower, col = col[4], lwd = line_width)
-lines(daily.testing.data$date, prediction.t.armax$upper, col = col[4], lwd = line_width)
-legend('bottomleft', legend = c('observation', 'Nonpar.Trend+ANOVA S.', 
-                                 'ARMA-GARCH', 'VARX', 'ARMAX'), col = c('black', col), lty =1)
-
-plot(daily.testing.data$date, daily.testing.data$humidity, type = 'l', ylim = c(0,8), main = 'Humidity Prediction', ylab = 'Humidity', xlab = 'Date', xaxt = 'n')
-axis(1, at = seq(from = min(daily.testing.data$date, na.rm = TRUE), 
-                 to = max(daily.testing.data$date, na.rm = TRUE), 
-                 by = "1 month"), 
-    labels = format(seq(from = min(daily.testing.data$date, na.rm = TRUE),
-                        to = max(daily.testing.data$date, na.rm = TRUE),
-                        by = "1 month"), "%Y-%m-%d"))
-points(daily.testing.data$date, gam.prediction$humidity, col = col[1], cex = point_size, xlab = 'Date')
-lines(daily.testing.data$date, prediction.h.gam$lower, col = col[1], lwd = line_width)
-lines(daily.testing.data$date, prediction.h.gam$upper, col = col[1], lwd = line_width)
-points(daily.testing.data$date, arma.garch.prediction[[3]]$prediction, col = col[2], cex = point_size, xlab = 'Date')
-lines(daily.testing.data$date, prediction.h.arma.garch$lower, col = col[2], lwd = line_width)
-lines(daily.testing.data$date, prediction.h.arma.garch$upper, col = col[2], lwd = line_width)
-points(daily.testing.data$date, varx.prediction[[3]]$fcst, col = col[3], cex = point_size, xlab = 'Date')
-lines(daily.testing.data$date, prediction.h.varx$lower, col = col[3], lwd = line_width)
-lines(daily.testing.data$date, prediction.h.varx$upper, col = col[3], lwd = line_width)
-points(daily.testing.data$date, armax.prediction[[3]]$prediction, col = col[4], cex = point_size, xlab = 'Date')
-lines(daily.testing.data$date, prediction.h.armax$lower, col = col[4], lwd = line_width)
-lines(daily.testing.data$date, prediction.h.armax$upper, col = col[4], lwd = line_width)
-legend('bottomleft', legend = c('observation', 'Nonpar.Trend+ANOVA S.', 
-                                 'ARMA-GARCH', 'VARX', 'ARMAX'), col = c('black', col), lty = 1)
-
+nfit = length(daily.training.date)
+nfore = length(daily.testing.date)
 ```
 
-# Forecasting Measures
 
-## MAE
-```{r}
-gam.mae <- colMeans(abs(daily.testing.data[,2:4] - gam.prediction[,2:4]))
-
-arma.garch.mae <- colMeans(abs(daily.testing.data[,2:4] - cbind(arma.garch.prediction[[1]]$prediction, arma.garch.prediction[[2]]$prediction,arma.garch.prediction[[3]]$prediction)))
-
-varx.mae <- colMeans(abs(daily.testing.data[,2:4] - cbind(varx.prediction[[1]]$fcst, varx.prediction[[2]]$fcst,varx.prediction[[3]]$fcst)))
-
-armax.mae <- colMeans(abs(daily.testing.data[,2:4] - cbind(armax.prediction[[1]]$prediction, armax.prediction[[2]]$prediction,armax.prediction[[3]]$prediction)))
-
-mae <- rbind(gam.mae, arma.garch.mae, varx.mae, armax.mae)
-rownames(mae) <- c('Nonparametric Trend + ANOVA Seasonality', 
-                                 'ARMA-GARCH', 'VARX', 'ARMAX')
-kable(mae, align = 'c', row.names = TRUE)
-```
-
-## PM
-```{r}
-gam.pm <- colSums((gam.prediction[,2:4] - daily.testing.data[,2:4])^2) / colSums((daily.testing.data[,2:4] - colMeans(daily.testing.data[,2:4]))^2)
-
-arma.garch.pm <- colSums((cbind(arma.garch.prediction[[1]]$prediction, arma.garch.prediction[[2]]$prediction,arma.garch.prediction[[3]]$prediction) - daily.testing.data[,2:4])^2) / colSums((daily.testing.data[,2:4] - colMeans(daily.testing.data[,2:4]))^2)
-
-varx.pm <- colSums((cbind(varx.prediction[[1]]$fcst, varx.prediction[[2]]$fcst,varx.prediction[[3]]$fcst) - daily.testing.data[,2:4])^2) / colSums((daily.testing.data[,2:4] - colMeans(daily.testing.data[,2:4]))^2)
-
-armax.pm <- colSums((cbind(armax.prediction[[1]]$prediction, armax.prediction[[2]]$prediction,armax.prediction[[3]]$prediction) - daily.testing.data[,2:4])^2) / colSums((daily.testing.data[,2:4] - colMeans(daily.testing.data[,2:4]))^2)
-
-pm <- rbind(gam.pm, arma.garch.pm, varx.pm, armax.pm)
-rownames(pm) <- c('Nonparametric Trend + ANOVA Seasonality', 
-                                 'ARMA-GARCH', 'VARX', 'ARMAX')
-kable(pm, align = 'c', row.names = TRUE)
-```
 
 
 
